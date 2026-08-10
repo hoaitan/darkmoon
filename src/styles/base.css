@@ -1,0 +1,62 @@
+:root {
+  --bg: #14152b;
+  --bg-elevated: #1b1f3b;
+  --bg-control: #2d2b55;
+  --border: #423f78;
+  --text: #f4efe1;
+  --text-dim: #9a97c9;
+  --accent: #4a9fef;
+  --accent-contrast: #0b1220;
+  --radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+}
+
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+.label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.segmented {
+  display: flex;
+  background: var(--bg-control);
+  border-radius: var(--radius);
+  padding: 2px;
+}
+
+.segmented button {
+  flex: 1;
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+}
