@@ -64,6 +64,10 @@ export async function clearCacheEntry(domain: string): Promise<void> {
   await chrome.storage.local.set({ themeCache: cache });
 }
 
+export async function clearAllCacheEntries(): Promise<void> {
+  await chrome.storage.local.remove("themeCache");
+}
+
 export async function addToIgnoreList(domain: string): Promise<void> {
   const settings = await getSettings();
   if (settings.ignoreList.includes(domain)) return;
