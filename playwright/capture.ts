@@ -33,6 +33,11 @@ const FIXTURES: Fixture[] = [
   { name: "spa-like", file: "spa-like.html", expectDarkened: true },
   { name: "docs-site", file: "docs-site.html", expectDarkened: true },
   { name: "already-dark-site", file: "already-dark-site.html", expectDarkened: false },
+  {
+    name: "already-dark-external-css-site",
+    file: "already-dark-external-css-site.html",
+    expectDarkened: false,
+  },
 ];
 
 let failures = 0;
@@ -57,6 +62,15 @@ interface FixtureServer {
  * non-scriptable opt-in per extension. Serving fixtures over local HTTP
  * sidesteps that entirely and is a closer match to real websites anyway.
  */
+/**
+ * Real docs sites (Astro/Starlight, etc.) ship their dark background via an
+ * external stylesheet fetched over the network, not an inline <style> block —
+ * see already-dark-external-css-site.html. Delaying .css responses here
+ * reproduces that fetch latency deterministically instead of relying on
+ * incidental localhost timing.
+ */
+const CSS_RESPONSE_DELAY_MS = 150;
+
 async function startFixtureServer(): Promise<FixtureServer> {
   const server = http.createServer((req, res) => {
     const requestPath = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/");
@@ -70,7 +84,16 @@ async function startFixtureServer(): Promise<FixtureServer> {
         res.writeHead(404).end("not found");
         return;
       }
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(data);
+      const isCss = filePath.endsWith(".css");
+      const respond = (): void => {
+        const contentType = isCss ? "text/css; charset=utf-8" : "text/html; charset=utf-8";
+        res.writeHead(200, { "Content-Type": contentType }).end(data);
+      };
+      if (isCss) {
+        setTimeout(respond, CSS_RESPONSE_DELAY_MS);
+      } else {
+        respond();
+      }
     });
   });
 

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Already-dark site fixture (external stylesheet)</title>
+    <!--
+      Docs frameworks like Astro/Starlight ship their dark background via an
+      external stylesheet (a real network fetch), not an inline <style> block.
+      This fixture reproduces that shape — see already-dark-external.css,
+      which the fixture server deliberately delays.
+    -->
+    <link rel="stylesheet" href="/already-dark-external.css" />
+  </head>
+  <body>
+    <main>
+      <h1>A site that ships its own dark theme via an external stylesheet</h1>
+      <div class="card">Darkmoon should detect this background is already dark and skip filtering entirely.</div>
+    </main>
+  </body>
+</html>

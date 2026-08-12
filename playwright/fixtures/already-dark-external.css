@@ -1,0 +1,18 @@
+body {
+  margin: 0;
+  background: #121212;
+  color: #e8e8e8;
+  font-family: sans-serif;
+}
+
+main {
+  padding: 24px;
+  max-width: 640px;
+}
+
+.card {
+  background: #1e1e1e;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 16px;
+}
