@@ -97,3 +97,17 @@ output {
 .empty[hidden] {
   display: none;
 }
+
+.secondary {
+  align-self: flex-start;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.secondary:hover {
+  background: var(--bg-control);
+}

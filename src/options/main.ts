@@ -2,7 +2,14 @@ import { ensureChromeEnv } from "../lib/chrome-env";
 
 ensureChromeEnv();
 
-import { getSettings, onSettingsChanged, removeFromIgnoreList, setDomainOverride, setSettings } from "../lib/storage";
+import {
+  clearAllCacheEntries,
+  getSettings,
+  onSettingsChanged,
+  removeFromIgnoreList,
+  setDomainOverride,
+  setSettings,
+} from "../lib/storage";
 import type { FilterSettings, Mode } from "../lib/types";
 
 const globalModeButtons = document.querySelectorAll<HTMLButtonElement>('[data-role="global-mode"] button');
@@ -18,6 +25,8 @@ const overridesList = document.querySelector<HTMLUListElement>('[data-role="over
 const overridesEmpty = document.querySelector<HTMLElement>('[data-role="overrides-empty"]')!;
 const ignoreList = document.querySelector<HTMLUListElement>('[data-role="ignore-list"]')!;
 const ignoreEmpty = document.querySelector<HTMLElement>('[data-role="ignore-empty"]')!;
+const clearCacheButton = document.querySelector<HTMLButtonElement>('[data-role="clear-cache"]')!;
+const clearCacheStatus = document.querySelector<HTMLElement>('[data-role="clear-cache-status"]')!;
 
 function renderGlobalMode(mode: Mode): void {
   globalModeButtons.forEach((btn) => {
@@ -101,6 +110,18 @@ function wireSlider(input: HTMLInputElement, output: HTMLElement, key: keyof Fil
 wireSlider(brightnessInput, brightnessValue, "brightness");
 wireSlider(contrastInput, contrastValue, "contrast");
 wireSlider(sepiaInput, sepiaValue, "sepia");
+
+let clearCacheStatusTimer: ReturnType<typeof setTimeout> | undefined;
+
+clearCacheButton.addEventListener("click", () => {
+  void clearAllCacheEntries().then(() => {
+    clearCacheStatus.hidden = false;
+    clearTimeout(clearCacheStatusTimer);
+    clearCacheStatusTimer = setTimeout(() => {
+      clearCacheStatus.hidden = true;
+    }, 1500);
+  });
+});
 
 onSettingsChanged(() => void refresh());
 

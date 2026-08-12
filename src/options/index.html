@@ -55,6 +55,16 @@
         <ul class="list" data-role="ignore-list"></ul>
         <p class="empty" data-role="ignore-empty">No ignored sites yet.</p>
       </section>
+
+      <section class="card">
+        <span class="label">Cached theme data</span>
+        <p class="hint">
+          Darkmoon caches the computed dark-mode style per site so it doesn't have to resample colors on every visit.
+          Clearing it is safe — sites recompute automatically next time you visit them.
+        </p>
+        <button type="button" class="secondary" data-role="clear-cache">Clear all cached CSS</button>
+        <p class="hint" data-role="clear-cache-status" hidden>Cleared.</p>
+      </section>
     </main>
     <script type="module" src="./main.ts"></script>
   </body>
