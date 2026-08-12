@@ -19,16 +19,46 @@ const domain = normalizeDomain(location.hostname);
 let appliedCss: string | null = null;
 
 /**
+ * <body> existing isn't enough on its own: sites that ship their background
+ * via an external stylesheet (common on docs frameworks like Astro/Starlight)
+ * can have that <link> still in flight when <body> appears in the DOM, so a
+ * sample taken right away reads the page's un-styled default (transparent)
+ * instead of its real background — misclassifying an already-dark page as
+ * light and inverting it. Wait for any stylesheet present at that point to
+ * finish loading (or fail) before trusting a computed style read.
+ */
+function whenStylesheetsLoaded(): Promise<void> {
+  const pending = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')).filter(
+    (link) => !link.sheet,
+  );
+  if (pending.length === 0) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let remaining = pending.length;
+    const settle = (): void => {
+      remaining -= 1;
+      if (remaining <= 0) resolve();
+    };
+    for (const link of pending) {
+      link.addEventListener("load", settle, { once: true });
+      link.addEventListener("error", settle, { once: true });
+    }
+  });
+}
+
+/**
  * Runs at document_start, before <body> parses — getComputedStyle on an
  * element that doesn't exist yet always reads as transparent, so a
  * first-visit lightness sample has to wait for the body to exist. Cached
  * (repeat-visit) filters skip this wait entirely to minimize flash-of-light.
  */
-function whenBodyReady(): Promise<void> {
-  if (document.body) return Promise.resolve();
-  return new Promise((resolve) => {
-    document.addEventListener("DOMContentLoaded", () => resolve(), { once: true });
-  });
+async function whenBodyReady(): Promise<void> {
+  if (!document.body) {
+    await new Promise<void>((resolve) => {
+      document.addEventListener("DOMContentLoaded", () => resolve(), { once: true });
+    });
+  }
+  await whenStylesheetsLoaded();
 }
 
 function samplePageLightness(): number {
