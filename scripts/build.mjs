@@ -80,6 +80,13 @@ function viteInlineConfig() {
       outDir: "dist",
       emptyOutDir: false,
       sourcemap: true,
+      // Extension pages load every chunk from the local unpacked/CRX file
+      // store, so modulepreload hints save no latency — they just make
+      // Chromium log "cross-world extension resource mismatch" console
+      // noise for the shared chunks popup.html/options.html both import
+      // (e.g. lib/storage.ts). The module graph still loads fine via each
+      // entry script's own static import.
+      modulePreload: false,
       rollupOptions: {
         input: Object.fromEntries(
           PAGES.map(({ entry }) => [path.basename(path.dirname(entry)), path.join(ROOT, entry)]),
