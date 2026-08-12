@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>Darkmoon</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <header class="header">
+        <img src="../assets/icons/icon-32.png" width="20" height="20" alt="" />
+        <h1>Darkmoon</h1>
+      </header>
+
+      <section class="section">
+        <span class="label">Appearance</span>
+        <div class="segmented" data-role="global-mode" role="radiogroup" aria-label="Global mode">
+          <button type="button" data-value="light">Light</button>
+          <button type="button" data-value="dark">Dark</button>
+          <button type="button" data-value="auto">Auto</button>
+        </div>
+      </section>
+
+      <section class="site-section">
+        <span class="label">This site</span>
+        <div class="site-row">
+          <span class="domain" data-role="domain">—</span>
+        </div>
+        <div class="site-row">
+          <select data-role="site-override" aria-label="Mode for this site">
+            <option value="default">Use global setting</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+            <option value="auto">Auto</option>
+          </select>
+        </div>
+        <div class="site-row">
+          <label class="checkbox">
+            <input type="checkbox" data-role="ignore-toggle" />
+            Ignore this site
+          </label>
+        </div>
+        <button type="button" class="secondary" data-role="recalculate">Recalculate this site</button>
+      </section>
+
+      <footer class="footer">
+        <button type="button" class="link" data-role="open-options">More settings</button>
+      </footer>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

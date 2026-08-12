@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>Darkmoon Settings</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="options">
+      <header class="header">
+        <img src="../assets/icons/icon-48.png" width="28" height="28" alt="" />
+        <h1>Darkmoon Settings</h1>
+      </header>
+
+      <section class="card">
+        <span class="label">Global mode</span>
+        <div class="segmented" data-role="global-mode" role="radiogroup" aria-label="Global mode">
+          <button type="button" data-value="light">Light</button>
+          <button type="button" data-value="dark">Dark</button>
+          <button type="button" data-value="auto">Auto</button>
+        </div>
+        <p class="hint">Auto follows your system's light/dark setting.</p>
+      </section>
+
+      <section class="card">
+        <span class="label">Filter tuning</span>
+        <div class="slider-row">
+          <label for="brightness">Brightness</label>
+          <input type="range" id="brightness" min="50" max="150" step="1" data-role="brightness" />
+          <output data-role="brightness-value"></output>
+        </div>
+        <div class="slider-row">
+          <label for="contrast">Contrast</label>
+          <input type="range" id="contrast" min="50" max="150" step="1" data-role="contrast" />
+          <output data-role="contrast-value"></output>
+        </div>
+        <div class="slider-row">
+          <label for="sepia">Sepia</label>
+          <input type="range" id="sepia" min="0" max="100" step="1" data-role="sepia" />
+          <output data-role="sepia-value"></output>
+        </div>
+      </section>
+
+      <section class="card">
+        <span class="label">Per-site overrides</span>
+        <ul class="list" data-role="overrides-list"></ul>
+        <p class="empty" data-role="overrides-empty">
+          No per-site overrides yet — set one from the on-page notification.
+        </p>
+      </section>
+
+      <section class="card">
+        <span class="label">Ignored sites</span>
+        <ul class="list" data-role="ignore-list"></ul>
+        <p class="empty" data-role="ignore-empty">No ignored sites yet.</p>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

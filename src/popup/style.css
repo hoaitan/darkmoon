@@ -1,0 +1,98 @@
+@import "../styles/base.css";
+
+.popup {
+  width: 280px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header h1 {
+  font-size: 14px;
+  margin: 0;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.site-section {
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+
+.site-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.site-row:last-of-type {
+  margin-bottom: 0;
+}
+
+.domain {
+  font-weight: 600;
+  word-break: break-all;
+}
+
+select {
+  width: 100%;
+  background: var(--bg-control);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
+.secondary {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.secondary:hover {
+  background: var(--bg-control);
+}
+
+.secondary:disabled,
+select:disabled,
+.checkbox input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.footer {
+  display: flex;
+  justify-content: center;
+}
+
+.link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 4px;
+}

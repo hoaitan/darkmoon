@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>SPA-like fixture</title>
+    <style>
+      body {
+        margin: 0;
+        background: #ffffff;
+        color: #111;
+        font-family: sans-serif;
+      }
+      #app {
+        padding: 24px;
+      }
+      .skeleton {
+        color: #999;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"><p class="skeleton">Loading…</p></div>
+    <script>
+      // Simulates a client-rendered SPA where real content shows up after the
+      // initial paint — exercises the case where document_start sampling
+      // still has to land on a meaningful background.
+      setTimeout(() => {
+        document.getElementById("app").innerHTML = `
+          <h1>Client-rendered dashboard</h1>
+          <p>This content was injected by JavaScript after page load.</p>
+          <ul>
+            <li>Widget one</li>
+            <li>Widget two</li>
+          </ul>
+        `;
+      }, 150);
+    </script>
+  </body>
+</html>
