@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Already-dark site fixture (inert stylesheet links)</title>
+    <!--
+      Some sites (e.g. github.com's theme switcher) register one
+      <link rel="stylesheet"> per selectable theme up front, but only ever
+      set a real `href` on the active one — the rest sit in the DOM with no
+      href at all, waiting to be activated on demand. Such a link never
+      fetches anything, so it never fires `load` or `error`. A background
+      sampler that waits on *every* stylesheet-without-a-sheet to load,
+      unconditionally, will wait on these forever.
+    -->
+    <link data-color-theme="light" data-href="/never-loaded-light.css" rel="stylesheet" />
+    <link data-color-theme="dark_high_contrast" data-href="/never-loaded-dark-hc.css" rel="stylesheet" />
+    <link data-color-theme="dark_dimmed" data-href="/never-loaded-dark-dimmed.css" rel="stylesheet" />
+    <style>
+      body {
+        margin: 0;
+        background: #121212;
+        color: #e8e8e8;
+        font-family: sans-serif;
+      }
+      main {
+        padding: 24px;
+        max-width: 640px;
+      }
+      .card {
+        background: #1e1e1e;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>A dark site with inert, never-loading stylesheet links</h1>
+      <div class="card">
+        Darkmoon should detect this background is already dark and skip filtering — without hanging forever waiting
+        on the inert theme-switcher links above.
+      </div>
+    </main>
+  </body>
+</html>

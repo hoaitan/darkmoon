@@ -38,6 +38,11 @@ const FIXTURES: Fixture[] = [
     file: "already-dark-external-css-site.html",
     expectDarkened: false,
   },
+  {
+    name: "already-dark-inert-stylesheet-site",
+    file: "already-dark-inert-stylesheet-site.html",
+    expectDarkened: false,
+  },
 ];
 
 let failures = 0;
@@ -144,6 +149,24 @@ async function clearThemeCache(context: BrowserContext, extensionId: string): Pr
   await page.close();
 }
 
+/**
+ * A page that never finishes background-sampling (e.g. stuck waiting on a
+ * stylesheet link that will never fire load/error) never writes a cache
+ * entry — it also never applies a filter, which looks identical to a
+ * correctly-detected already-dark no-op from `pageFilter()` alone. This
+ * distinguishes the two: no entry means detection hung, not that it succeeded.
+ */
+async function themeCacheHasEntry(context: BrowserContext, extensionId: string, domain: string): Promise<boolean> {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/options.html`);
+  const hasEntry = await page.evaluate(async (d) => {
+    const store = (await chrome.storage.local.get("themeCache")) as { themeCache?: Record<string, unknown> };
+    return Boolean(store.themeCache?.[d]);
+  }, domain);
+  await page.close();
+  return hasEntry;
+}
+
 function buildExtension(): void {
   console.log("[darkmoon] building extension for verification…");
   execSync("node scripts/build.mjs", { cwd: ROOT, stdio: "inherit" });
@@ -215,6 +238,8 @@ async function main(): Promise<void> {
 
         const filter = await pageFilter(page);
         const notified = (await notificationHostCount(page)) > 0;
+
+        check("detection completed (didn't hang)", await themeCacheHasEntry(context, extensionId, "127.0.0.1"));
 
         if (fixture.expectDarkened) {
           check("page filter was applied", filter !== "none");
