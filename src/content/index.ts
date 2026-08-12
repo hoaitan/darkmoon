@@ -19,6 +19,17 @@ const domain = normalizeDomain(location.hostname);
 let appliedCss: string | null = null;
 
 /**
+ * Upper bound on how long a first-visit sample waits on in-flight
+ * stylesheets. Bounded rather than open-ended: some sites (e.g. github.com's
+ * theme switcher) register a <link rel="stylesheet"> per selectable theme up
+ * front but only ever give the active one a real `href`, leaving the rest
+ * inert forever — those are filtered out below since they'll never fetch,
+ * but this timeout is a second line of defense for any other link that
+ * stalls or never fires load/error for reasons we haven't seen yet.
+ */
+const STYLESHEET_LOAD_TIMEOUT_MS = 2000;
+
+/**
  * <body> existing isn't enough on its own: sites that ship their background
  * via an external stylesheet (common on docs frameworks like Astro/Starlight)
  * can have that <link> still in flight when <body> appears in the DOM, so a
@@ -26,14 +37,18 @@ let appliedCss: string | null = null;
  * instead of its real background — misclassifying an already-dark page as
  * light and inverting it. Wait for any stylesheet present at that point to
  * finish loading (or fail) before trusting a computed style read.
+ *
+ * Only links with a real `href` count as "in flight" — a <link
+ * rel="stylesheet"> with no href (or an empty one) has nothing to fetch and
+ * will never dispatch load or error, so waiting on it would hang forever.
  */
 function whenStylesheetsLoaded(): Promise<void> {
   const pending = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')).filter(
-    (link) => !link.sheet,
+    (link) => !link.sheet && link.href,
   );
   if (pending.length === 0) return Promise.resolve();
 
-  return new Promise((resolve) => {
+  const allLoaded = new Promise<void>((resolve) => {
     let remaining = pending.length;
     const settle = (): void => {
       remaining -= 1;
@@ -44,6 +59,9 @@ function whenStylesheetsLoaded(): Promise<void> {
       link.addEventListener("error", settle, { once: true });
     }
   });
+  const timeout = new Promise<void>((resolve) => setTimeout(resolve, STYLESHEET_LOAD_TIMEOUT_MS));
+
+  return Promise.race([allLoaded, timeout]);
 }
 
 /**
