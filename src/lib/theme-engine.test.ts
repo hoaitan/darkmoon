@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   ALREADY_DARK_LIGHTNESS_THRESHOLD,
   calculateFilter,
+  classifyElementBackground,
   counterInvertFilterCSS,
   isAlreadyDark,
+  mediaFilterCSS,
   parseCssColor,
   relativeLightness,
 } from "./theme-engine";
@@ -68,5 +70,76 @@ describe("calculateFilter", () => {
 describe("counterInvertFilterCSS", () => {
   it("double-inverts to cancel the page-level filter for media elements", () => {
     expect(counterInvertFilterCSS()).toBe("invert(1) hue-rotate(180deg)");
+  });
+});
+
+describe("mediaFilterCSS", () => {
+  it("puts brightness before invert/hue-rotate, not after", () => {
+    // Order is load-bearing, not stylistic: composed with the page-level
+    // invert+hue-rotate on <html>, "brightness(B%) invert(1) hue-rotate(180deg)"
+    // works out to a clean `x * B` on the original color (a real dim), while
+    // putting brightness *after* the invert/hue-rotate pair works out to
+    // `1 - B*(1-x)` instead — that lifts shadows toward gray rather than
+    // pulling highlights down, which is the opposite of "less light".
+    expect(mediaFilterCSS(90)).toBe("brightness(90%) invert(1) hue-rotate(180deg)");
+  });
+
+  it("is a no-op dim at 100%, equivalent to the plain counter-invert", () => {
+    expect(mediaFilterCSS(100)).toBe(`brightness(100%) ${counterInvertFilterCSS()}`);
+  });
+});
+
+describe("classifyElementBackground", () => {
+  it("classifies an opaque, below-threshold background as an already-dark island", () => {
+    expect(classifyElementBackground({ backgroundColor: "rgb(20, 20, 20)", backgroundImage: "none" })).toBe("dark");
+  });
+
+  it("does not classify a light background as dark", () => {
+    expect(classifyElementBackground({ backgroundColor: "rgb(240, 240, 240)", backgroundImage: "none" })).toBeNull();
+  });
+
+  it("ignores a transparent dark-looking color — nothing was actually painted", () => {
+    expect(classifyElementBackground({ backgroundColor: "rgba(20, 20, 20, 0)", backgroundImage: "none" })).toBeNull();
+  });
+
+  it("ignores a low-alpha dark tint — a shadow/hover wash, not an opaque dark surface", () => {
+    expect(classifyElementBackground({ backgroundColor: "rgba(20, 20, 20, 0.2)", backgroundImage: "none" })).toBeNull();
+  });
+
+  it("classifies a majority-opaque dark background (e.g. a modal backdrop) as dark", () => {
+    expect(classifyElementBackground({ backgroundColor: "rgba(20, 20, 20, 0.5)", backgroundImage: "none" })).toBe(
+      "dark",
+    );
+  });
+
+  it("classifies a raster background-image as a media island", () => {
+    expect(
+      classifyElementBackground({
+        backgroundColor: "rgba(0, 0, 0, 0)",
+        backgroundImage: 'url("https://example.com/hero.jpg")',
+      }),
+    ).toBe("media");
+  });
+
+  it("does not classify a gradient-only background-image as media", () => {
+    expect(
+      classifyElementBackground({
+        backgroundColor: "rgba(0, 0, 0, 0)",
+        backgroundImage: "linear-gradient(rgb(0, 0, 0), rgb(255, 255, 255))",
+      }),
+    ).toBeNull();
+  });
+
+  it("prefers the dark classification when both a dark background and an image are present", () => {
+    expect(
+      classifyElementBackground({
+        backgroundColor: "rgb(10, 10, 10)",
+        backgroundImage: 'url("https://example.com/texture.png")',
+      }),
+    ).toBe("dark");
+  });
+
+  it("returns null for an unstyled element (no color, no image)", () => {
+    expect(classifyElementBackground({ backgroundColor: "rgba(0, 0, 0, 0)", backgroundImage: "none" })).toBeNull();
   });
 });

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Light site with an already-dark widget fixture</title>
+    <style>
+      body {
+        margin: 0;
+        background: #ffffff;
+        color: #1a1a1a;
+        font-family: sans-serif;
+      }
+      main {
+        padding: 24px;
+        max-width: 640px;
+      }
+      /* Simulates an embedded widget that ships its own dark theme (a code
+         sandbox, a chat/support widget, a video player's control bar) sitting
+         inside an otherwise light page — DAR-17: blanket inversion used to
+         turn this into a blown-out light box instead of leaving it alone. */
+      .widget {
+        background: #101820;
+        color: #d8e0ea;
+        border-radius: 8px;
+        padding: 16px;
+        margin-top: 16px;
+      }
+      .widget .accent {
+        color: #7fd0ff;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>A plain light page with an embedded dark widget</h1>
+      <p>The page itself is light and should be inverted as usual.</p>
+      <div class="widget">
+        <p>
+          This widget ships its own dark theme (<span class="accent">already dark</span>) and should be left alone
+          instead of being inverted to a harsh light color.
+        </p>
+      </div>
+    </main>
+  </body>
+</html>

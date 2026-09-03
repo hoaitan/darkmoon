@@ -16,7 +16,11 @@ epic in Retask for the full architecture and roadmap.
 - **Content script** (`src/content`) — runs on every page at `document_start`: resolves the
   effective mode (domain override → global mode → device `prefers-color-scheme`), samples the
   page's background lightness on first visit, computes/caches an invert+hue-rotate filter, and
-  renders the top-right notification inside a Shadow DOM root.
+  renders the top-right notification inside a Shadow DOM root. `src/content/islands.ts` walks the
+  page (idle-scheduled, and re-run via `MutationObserver` for content that loads later) to find
+  already-dark widgets and raster `background-image` containers and counter-invert those
+  specifically, so blanket inversion doesn't blow out an embedded dark-themed widget or invert a
+  CSS-background photo the img/video/canvas/picture selector alone can't reach.
 - **Toolbar popup** (`src/popup`) — global mode switch, per-site override/ignore, recalculate.
 - **Options page** (`src/options`) — global mode, brightness/contrast/sepia sliders, and
   per-site override/ignore-list management.

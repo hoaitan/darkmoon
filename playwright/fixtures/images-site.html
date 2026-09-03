@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Light site with images fixture</title>
+    <style>
+      body {
+        margin: 0;
+        background: #ffffff;
+        color: #1a1a1a;
+        font-family: sans-serif;
+      }
+      main {
+        padding: 24px;
+        max-width: 640px;
+      }
+      img {
+        display: block;
+        width: 240px;
+        height: 120px;
+        margin: 12px 0;
+      }
+      /* DAR-17: a raster CSS background-image isn't caught by the
+         img/video/canvas/picture tag selector, so it used to render fully
+         color-inverted instead of dimmed-but-recognizable. */
+      .hero {
+        background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAAB4CAIAAABD1OhwAAAACXBIWXMAAAPoAAAD6AG1e1JrAAACHklEQVR4nO3SQQ3DQAADsMIJiCEZusEpiLyLYzAulSwZgq8mr5Pf532+fZ3nzutcx3cKPes5vVPoYad3RuhZ53cKfY8SWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFziahha7QQgudTUILXaGFFjqbhBa6QgstdDYJLXSFFlrobBJa6AottNDZJLTQFVpoobNJaKErtNBCZ5PQQldooYXOJqGFrtBCC51NQgtdoYUWOpuEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCV2ihhc4moYWu0EILnU1CC12hhRY6m4QWukILLXQ2CS10hRZa6GwSWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFziahha7QQgudTUILXaGFFjqbhBa6QgstdDYJLXSFFlrobBJa6AottNDZJLTQFVpoobNJaKErtNBCZ5PQQldooYXOJqGFrtBCC51NQgtdoYUWOpuEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCC33a+Z1C36OEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCV2ihhc4moYWu0EILnU1CC12hhRY6m4QWukILLXQ2CS10hRZa6GwSWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFzqY/l9OlWqPiBPkAAAAASUVORK5CYII=");
+        background-size: cover;
+        padding: 24px;
+        color: #ffffff;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>A page with both an &lt;img&gt; tag and a CSS background-image</h1>
+      <img
+        class="standalone-photo"
+        alt="a standalone photo"
+        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAAB4CAIAAABD1OhwAAAACXBIWXMAAAPoAAAD6AG1e1JrAAACHklEQVR4nO3SQQ3DQAADsMIJiCEZusEpiLyLYzAulSwZgq8mr5Pf532+fZ3nzutcx3cKPes5vVPoYad3RuhZ53cKfY8SWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFziahha7QQgudTUILXaGFFjqbhBa6QgstdDYJLXSFFlrobBJa6AottNDZJLTQFVpoobNJaKErtNBCZ5PQQldooYXOJqGFrtBCC51NQgtdoYUWOpuEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCV2ihhc4moYWu0EILnU1CC12hhRY6m4QWukILLXQ2CS10hRZa6GwSWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFziahha7QQgudTUILXaGFFjqbhBa6QgstdDYJLXSFFlrobBJa6AottNDZJLTQFVpoobNJaKErtNBCZ5PQQldooYXOJqGFrtBCC51NQgtdoYUWOpuEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCC33a+Z1C36OEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCV2ihhc4moYWu0EILnU1CC12hhRY6m4QWukILLXQ2CS10hRZa6GwSWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFzqY/l9OlWqPiBPkAAAAASUVORK5CYII="
+      />
+      <div class="hero">
+        <img
+          class="hero-photo"
+          alt="a photo nested inside the background-image container"
+          src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAAB4CAIAAABD1OhwAAAACXBIWXMAAAPoAAAD6AG1e1JrAAACHklEQVR4nO3SQQ3DQAADsMIJiCEZusEpiLyLYzAulSwZgq8mr5Pf532+fZ3nzutcx3cKPes5vVPoYad3RuhZ53cKfY8SWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFziahha7QQgudTUILXaGFFjqbhBa6QgstdDYJLXSFFlrobBJa6AottNDZJLTQFVpoobNJaKErtNBCZ5PQQldooYXOJqGFrtBCC51NQgtdoYUWOpuEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCV2ihhc4moYWu0EILnU1CC12hhRY6m4QWukILLXQ2CS10hRZa6GwSWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFziahha7QQgudTUILXaGFFjqbhBa6QgstdDYJLXSFFlrobBJa6AottNDZJLTQFVpoobNJaKErtNBCZ5PQQldooYXOJqGFrtBCC51NQgtdoYUWOpuEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCC33a+Z1C36OEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCV2ihhc4moYWu0EILnU1CC12hhRY6m4QWukILLXQ2CS10hRZa6GwSWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFzqY/l9OlWqPiBPkAAAAASUVORK5CYII="
+        />
+        <p class="hero-caption">Overlay caption designed to sit on the hero image as-is.</p>
+      </div>
+    </main>
+  </body>
+</html>

@@ -9,9 +9,17 @@ import {
   setCacheEntry,
   setDomainOverride,
 } from "../lib/storage";
-import { calculateFilter, counterInvertFilterCSS, parseCssColor, relativeLightness } from "../lib/theme-engine";
+import {
+  calculateFilter,
+  counterInvertFilterCSS,
+  MEDIA_DIM_BRIGHTNESS_PERCENT,
+  mediaFilterCSS,
+  parseCssColor,
+  relativeLightness,
+} from "../lib/theme-engine";
 import type { DarkmoonMessage, DarkmoonResponse } from "../lib/messages";
 import type { Mode } from "../lib/types";
+import { DARK_ISLAND_CLASS, MEDIA_ISLAND_CLASS, startIslandWatch, stopIslandWatch } from "./islands";
 import { removeNotification, showNotification } from "./notification";
 
 const domain = normalizeDomain(location.hostname);
@@ -89,28 +97,63 @@ function samplePageLightness(): number {
   return 1;
 }
 
+// Single source of truth for the media tags the counter-invert/dim
+// treatment applies to — reused for both the plain rule and the
+// island-nested override rule so the two can't silently drift apart.
+const MEDIA_TAGS = ["img", "video", "canvas", "picture", "svg image"];
+
 function buildInjectedCss(filterCSS: string): string {
+  const mediaFilter = mediaFilterCSS(MEDIA_DIM_BRIGHTNESS_PERCENT);
+  const mediaSelector = MEDIA_TAGS.join(", ");
+  const islandMediaOverrideSelector = [DARK_ISLAND_CLASS, MEDIA_ISLAND_CLASS]
+    .flatMap((cls) => MEDIA_TAGS.map((tag) => `.${cls} ${tag}`))
+    .join(",\n");
+
   // No explicit background-color override here: `filter` transforms
   // everything the element paints, including its own background-color, so
   // setting one here would get inverted right along with the filter and
   // produce the wrong result. Letting the page's real background (default
   // white if unset) run through the filter is what makes it come out dark.
+  //
+  // The two island rules below (`.darkmoon-island-*`) counter-invert
+  // already-dark widgets and raster-background-image containers found by
+  // islands.ts, so blanket inversion doesn't blow them out — see
+  // classifyElementBackground's doc comment for why. The final override
+  // rule resets *their* nested img/video/etc back to `none`: those already
+  // get true colors for free once their island ancestor's filter cancels
+  // the page filter, so leaving the plain media rule active on them would
+  // apply a second, unwanted cancellation and re-invert them.
   return `html { filter: ${filterCSS} !important; }
-img, video, canvas, picture, svg image { filter: ${counterInvertFilterCSS()} !important; }`;
+${mediaSelector} { filter: ${mediaFilter} !important; }
+.${DARK_ISLAND_CLASS} { filter: ${counterInvertFilterCSS()} !important; }
+.${MEDIA_ISLAND_CLASS} { filter: ${mediaFilter} !important; }
+${islandMediaOverrideSelector} { filter: none !important; }`;
 }
 
 async function applyCss(css: string): Promise<void> {
   if (appliedCss === css) return;
   const response = (await chrome.runtime.sendMessage({ type: "darkmoon/apply-css", css } satisfies DarkmoonMessage)) as
     DarkmoonResponse | undefined;
-  if (response?.ok) appliedCss = css;
+  if (response?.ok) {
+    appliedCss = css;
+    startIslandWatch();
+  }
 }
 
 async function removeCss(): Promise<void> {
-  if (!appliedCss) return;
+  if (!appliedCss) {
+    stopIslandWatch();
+    return;
+  }
   const css = appliedCss;
   appliedCss = null;
+  // Wait for the filter CSS to actually be gone before stripping island
+  // marks: island elements have no styling of their own without their
+  // `.darkmoon-island-*` class (it's what opts them out of the page filter),
+  // so unmarking them first would flash them fully inverted for the
+  // duration of this round-trip to the background worker.
   await chrome.runtime.sendMessage({ type: "darkmoon/remove-css", css } satisfies DarkmoonMessage);
+  stopIslandWatch();
 }
 
 async function run(options: { isInitial: boolean; forceRecalculate?: boolean }): Promise<void> {

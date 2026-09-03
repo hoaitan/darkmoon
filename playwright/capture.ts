@@ -26,6 +26,8 @@ interface Fixture {
   file: string;
   /** Whether Darkmoon is expected to darken this page. */
   expectDarkened: boolean;
+  /** Fixture-specific assertions beyond the generic filter/notification checks. */
+  extraChecks?: (page: Page) => Promise<void>;
 }
 
 const FIXTURES: Fixture[] = [
@@ -42,6 +44,45 @@ const FIXTURES: Fixture[] = [
     name: "already-dark-inert-stylesheet-site",
     file: "already-dark-inert-stylesheet-site.html",
     expectDarkened: false,
+  },
+  {
+    // DAR-17: an already-dark embedded widget on an otherwise light page
+    // should be left alone (counter-inverted), not blown out to light.
+    name: "already-dark-widget-site",
+    file: "already-dark-widget-site.html",
+    expectDarkened: true,
+    extraChecks: async (page) => {
+      await page.waitForTimeout(200); // island scan is idle-scheduled
+      const isIsland = await page.evaluate(
+        () => document.querySelector(".widget")?.classList.contains("darkmoon-island-dark") ?? false,
+      );
+      check("already-dark widget was marked as an island (excluded from inversion)", isIsland);
+    },
+  },
+  {
+    // DAR-17: a CSS background-image isn't caught by the img/video/canvas/
+    // picture tag selector, and an image nested inside one shouldn't get
+    // double-cancelled back to fully inverted.
+    name: "images-site",
+    file: "images-site.html",
+    expectDarkened: true,
+    extraChecks: async (page) => {
+      await page.waitForTimeout(200); // island scan is idle-scheduled
+      const isMediaIsland = await page.evaluate(
+        () => document.querySelector(".hero")?.classList.contains("darkmoon-island-media") ?? false,
+      );
+      check("background-image container was marked as a media island", isMediaIsland);
+
+      const heroPhotoFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector(".hero-photo") as Element).filter,
+      );
+      check("image nested inside a media island isn't double-filtered back to inverted", heroPhotoFilter === "none");
+
+      const standalonePhotoFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector(".standalone-photo") as Element).filter,
+      );
+      check("standalone image still gets its own dimmed counter-invert filter", standalonePhotoFilter !== "none");
+    },
   },
 ];
 
@@ -248,6 +289,8 @@ async function main(): Promise<void> {
           check("page filter was skipped (already dark)", filter === "none");
           check("no notification shown for a no-op", !notified);
         }
+
+        await fixture.extraChecks?.(page);
 
         await page.screenshot({ path: path.join(OUT_DIR, `${fixture.name}-after.png`) });
         await page.close();
