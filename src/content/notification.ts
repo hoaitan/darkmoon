@@ -32,7 +32,7 @@ function buildStyles(): string {
     filter: ${counterInvertFilterCSS()};
     box-sizing: border-box;
     position: fixed;
-    top: 12px;
+    bottom: 12px;
     right: 12px;
     z-index: 2147483647;
     display: flex;
@@ -50,7 +50,7 @@ function buildStyles(): string {
     animation: darkmoon-in 160ms ease-out;
   }
   @keyframes darkmoon-in {
-    from { opacity: 0; transform: translateY(-6px); }
+    from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
   }
   .row { display: flex; align-items: center; gap: 8px; }
