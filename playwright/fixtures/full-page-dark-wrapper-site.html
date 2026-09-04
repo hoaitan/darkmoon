@@ -12,12 +12,13 @@
         font-family: sans-serif;
         color: #eee;
       }
-      /* Covers ~all of the page — a root app-shell wrapper, NOT a small
-         widget. DAR-17: this used to get misclassified as an already-dark
-         "island" (it does have an opaque dark background), which stopped
-         island scanning from descending any further and left every image
-         on the page un-dimmed/un-corrected — see classifyAndMark's
-         isTooLargeToBeIsland guard in islands.ts. */
+      /* Covers ~all of the page — a real root app-shell wrapper (see
+         abc.net.au). DAR-17: this SHOULD be treated as an already-dark
+         island (its own opaque background is genuinely intentional and
+         must stay uninverted, size notwithstanding) — the bug was that
+         doing so used to also stop the scan from descending any further,
+         leaving every image inside un-dimmed. islands.ts now keeps
+         descending past a dark island; see its `classify` function. */
       #app-wrapper {
         background: #1a1a1a;
         min-height: 100vh;

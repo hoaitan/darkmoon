@@ -86,23 +86,28 @@ const FIXTURES: Fixture[] = [
   },
   {
     // DAR-17: a root app-shell wrapper covering ~the whole page (common in
-    // real SPAs — see abc.net.au) has an opaque dark background of its own,
-    // but marking it as an island stops the scan from descending into it at
-    // all, silently disabling media dimming for every image on the page.
+    // real SPAs — see abc.net.au) has an opaque dark background of its own
+    // and should be preserved as an island (it's genuinely, intentionally
+    // dark) — but doing that used to also stop the scan from descending any
+    // further, leaving every image inside completely un-dimmed. Fixed by
+    // having islands.ts keep descending past a dark island instead of
+    // stopping there, giving nested media its own single dim via
+    // buildInjectedCss's dark-island override rule.
     name: "full-page-dark-wrapper-site",
     file: "full-page-dark-wrapper-site.html",
     expectDarkened: true,
     extraChecks: async (page) => {
       await page.waitForTimeout(200); // island scan is idle-scheduled
       const wrapperIsIsland = await page.evaluate(
-        () => document.querySelector("#app-wrapper")?.matches(".darkmoon-island-dark, .darkmoon-island-media") ?? false,
+        () => document.querySelector("#app-wrapper")?.classList.contains("darkmoon-island-dark") ?? false,
       );
-      check("full-page wrapper was NOT marked as an island (too large to be a widget)", !wrapperIsIsland);
+      check("full-page wrapper IS marked as an island (its own dark background is preserved)", wrapperIsIsland);
 
       const photoFilter = await page.evaluate(
         () => getComputedStyle(document.querySelector(".photo") as Element).filter,
       );
-      check("photo inside the wrapper still gets the dimmed counter-invert filter", photoFilter !== "none");
+      check("photo inside the wrapper is dimmed, not left untouched", photoFilter !== "none");
+      check("photo inside the wrapper is dimmed, not inverted", !photoFilter.includes("invert"));
     },
   },
 ];

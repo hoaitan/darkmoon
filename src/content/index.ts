@@ -19,7 +19,13 @@ import {
 } from "../lib/theme-engine";
 import type { DarkmoonMessage, DarkmoonResponse } from "../lib/messages";
 import type { Mode } from "../lib/types";
-import { DARK_ISLAND_CLASS, MEDIA_ISLAND_CLASS, startIslandWatch, stopIslandWatch } from "./islands";
+import {
+  DARK_ISLAND_CLASS,
+  MEDIA_ISLAND_CLASS,
+  MEDIA_NESTED_ISLAND_CLASS,
+  startIslandWatch,
+  stopIslandWatch,
+} from "./islands";
 import { removeNotification, showNotification } from "./notification";
 
 const domain = normalizeDomain(location.hostname);
@@ -120,9 +126,15 @@ const SPECIFICITY_BOOST = ":not(#darkmoon-specificity-boost)";
 function buildInjectedCss(filterCSS: string): string {
   const mediaFilter = mediaFilterCSS(MEDIA_DIM_BRIGHTNESS_PERCENT);
   const mediaSelector = MEDIA_TAGS.map((tag) => `${tag}${SPECIFICITY_BOOST}`).join(", ");
-  const islandMediaOverrideSelector = [DARK_ISLAND_CLASS, MEDIA_ISLAND_CLASS]
-    .flatMap((cls) => MEDIA_TAGS.map((tag) => `.${cls} ${tag}${SPECIFICITY_BOOST}`))
-    .join(",\n");
+  const overrideSelectorFor = (classes: string[]): string =>
+    classes.flatMap((cls) => MEDIA_TAGS.map((tag) => `.${cls} ${tag}${SPECIFICITY_BOOST}`)).join(",\n");
+  // A dark island applies no dim of its own (just a plain counter-invert),
+  // so nested media needs its own single dim. A media/media-nested island
+  // already applies the dim as part of its own filter, so nested media
+  // inside *that* needs none of its own — see the comment below for why
+  // both forms of nesting still land on exactly one dim overall.
+  const darkIslandMediaOverride = overrideSelectorFor([DARK_ISLAND_CLASS]);
+  const dimmedIslandMediaOverride = overrideSelectorFor([MEDIA_ISLAND_CLASS, MEDIA_NESTED_ISLAND_CLASS]);
 
   // No explicit background-color override here: `filter` transforms
   // everything the element paints, including its own background-color, so
@@ -130,19 +142,30 @@ function buildInjectedCss(filterCSS: string): string {
   // produce the wrong result. Letting the page's real background (default
   // white if unset) run through the filter is what makes it come out dark.
   //
-  // The two island rules below (`.darkmoon-island-*`) counter-invert
-  // already-dark widgets and raster-background-image containers found by
-  // islands.ts, so blanket inversion doesn't blow them out — see
-  // classifyElementBackground's doc comment for why. The final override
-  // rule resets *their* nested img/video/etc back to `none`: those already
-  // get true colors for free once their island ancestor's filter cancels
-  // the page filter, so leaving the plain media rule active on them would
-  // apply a second, unwanted cancellation and re-invert them.
+  // The island rules below counter-invert already-dark widgets and
+  // raster-background-image containers found by islands.ts, so blanket
+  // inversion doesn't blow them out — see classifyElementBackground's doc
+  // comment for why. `.darkmoon-island-media-nested` is the same idea one
+  // level deeper: a background-image container *inside* an already-
+  // cancelled zone (say, a photo panel inside a dark-themed app shell)
+  // doesn't need — and mustn't get — a second counter-invert layered on
+  // top of the one already in effect, just the dim; see islands.ts's
+  // `classify` for the full reasoning.
+  //
+  // The two override blocks below give nested img/video/etc exactly one
+  // dim no matter which kind of island it's inside: composed with the
+  // *two* invert layers that cancel around it (its island ancestor's, and
+  // html's), a dark island's plain counter-invert (no dim) needs the
+  // override to supply the one dim itself, while a media island's filter
+  // already *is* a dim, so the override there must supply none of its own
+  // — supplying a second dim in that case would double it up.
   return `html { filter: ${filterCSS} !important; }
 ${mediaSelector} { filter: ${mediaFilter} !important; }
 .${DARK_ISLAND_CLASS}${SPECIFICITY_BOOST} { filter: ${counterInvertFilterCSS()} !important; }
 .${MEDIA_ISLAND_CLASS}${SPECIFICITY_BOOST} { filter: ${mediaFilter} !important; }
-${islandMediaOverrideSelector} { filter: none !important; }`;
+.${MEDIA_NESTED_ISLAND_CLASS}${SPECIFICITY_BOOST} { filter: brightness(${MEDIA_DIM_BRIGHTNESS_PERCENT}%) !important; }
+${darkIslandMediaOverride} { filter: brightness(${MEDIA_DIM_BRIGHTNESS_PERCENT}%) !important; }
+${dimmedIslandMediaOverride} { filter: none !important; }`;
 }
 
 async function applyCss(css: string): Promise<void> {
