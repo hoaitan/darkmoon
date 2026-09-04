@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Narrow centered-table layout fixture</title>
+    <style>
+      /* Deliberately no background on html/body — mirrors classic
+         <body><center><table>-based layouts (news.ycombinator.com) where
+         all the visible coloring lives on a narrower, centered table and
+         html/body never paint anything of their own. DAR-17: a `filter` on
+         <html> was observed to leave the margin beyond the table painted as
+         the browser's plain unfiltered white canvas instead of inverting it
+         — even though <html>'s own computed background/filter were both
+         correct — while a `filter` on <body> does not have this gap. See
+         buildInjectedCss's comment in src/content/index.ts. */
+      body {
+        margin: 0;
+        font-family: sans-serif;
+      }
+      table {
+        background: #f6f6ef;
+        width: 500px;
+        margin: 0 auto;
+      }
+      td {
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <center>
+      <table>
+        <tr>
+          <td>A narrow table centered on an otherwise-unstyled page — the margins on either side have no background of their own.</td>
+        </tr>
+      </table>
+    </center>
+  </body>
+</html>

@@ -110,6 +110,25 @@ const FIXTURES: Fixture[] = [
       check("photo inside the wrapper is dimmed, not inverted", !photoFilter.includes("invert"));
     },
   },
+  {
+    // DAR-17: a classic <body><center><table>-based layout (news.ycombinator
+    // .com) where html/body never paint a background of their own. A
+    // `filter` on <html> was observed to leave the margin beyond the table
+    // painted as the browser's plain unfiltered white canvas instead of
+    // inverting it, even though <html>'s own computed background/filter
+    // were both correct — a rendering-level gap this project can't assert
+    // on directly (verified visually against the live site instead). This
+    // check guards the part that IS assertable: the filter must live on
+    // <body>, not <html>, which is the actual fix — see buildInjectedCss's
+    // comment in src/content/index.ts.
+    name: "narrow-centered-table-site",
+    file: "narrow-centered-table-site.html",
+    expectDarkened: true,
+    extraChecks: async (page) => {
+      const htmlFilter = await page.evaluate(() => getComputedStyle(document.documentElement).filter);
+      check("the filter is NOT on <html> (that's what left HN's margins unfiltered)", htmlFilter === "none");
+    },
+  },
 ];
 
 let failures = 0;
@@ -180,7 +199,8 @@ async function startFixtureServer(): Promise<FixtureServer> {
 }
 
 async function pageFilter(page: Page): Promise<string> {
-  return page.evaluate(() => getComputedStyle(document.documentElement).filter);
+  // The page-wide filter lives on <body>, not <html> — see buildInjectedCss.
+  return page.evaluate(() => getComputedStyle(document.body).filter);
 }
 
 async function notificationHostCount(page: Page): Promise<number> {

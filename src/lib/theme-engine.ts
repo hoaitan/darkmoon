@@ -70,7 +70,7 @@ export function counterInvertFilterCSS(): string {
  * page.
  *
  * Order is load-bearing: brightness has to run *before* invert/hue-rotate,
- * not after. Composed with the page's own invert+hue-rotate on <html>, a
+ * not after. Composed with the page-level invert+hue-rotate filter, a
  * leading brightness(B%) works out to a plain `x * B` on the original
  * color — a real dim. Appended at the end instead, the same composition
  * works out to `1 - B*(1-x)`, which lifts shadows toward gray rather than

@@ -136,6 +136,18 @@ function buildInjectedCss(filterCSS: string): string {
   const darkIslandMediaOverride = overrideSelectorFor([DARK_ISLAND_CLASS]);
   const dimmedIslandMediaOverride = overrideSelectorFor([MEDIA_ISLAND_CLASS, MEDIA_NESTED_ISLAND_CLASS]);
 
+  // The filter goes on <body>, not <html>. They're normally equivalent (body
+  // fills the viewport too) but aren't always: some real sites (e.g. a
+  // classic <body><center><table>-based layout, seen on news.ycombinator.com)
+  // leave <html>/<body> without an explicit background of their own and size
+  // <body> to its (narrower) content instead of the full viewport — and in
+  // that shape, a `filter` on <html> was observed to leave the margin beyond
+  // <body> painted as the browser's plain unfiltered white canvas instead of
+  // inverting it, even though <html>'s own computed background/filter were
+  // both correct. <body> doesn't have that gap. (This does mean the
+  // notification host, mounted on <html> so it works even before <body>
+  // exists, sits outside the filtered subtree now — see notification.ts.)
+  //
   // No explicit background-color override here: `filter` transforms
   // everything the element paints, including its own background-color, so
   // setting one here would get inverted right along with the filter and
@@ -155,11 +167,11 @@ function buildInjectedCss(filterCSS: string): string {
   // The two override blocks below give nested img/video/etc exactly one
   // dim no matter which kind of island it's inside: composed with the
   // *two* invert layers that cancel around it (its island ancestor's, and
-  // html's), a dark island's plain counter-invert (no dim) needs the
+  // body's), a dark island's plain counter-invert (no dim) needs the
   // override to supply the one dim itself, while a media island's filter
   // already *is* a dim, so the override there must supply none of its own
   // — supplying a second dim in that case would double it up.
-  return `html { filter: ${filterCSS} !important; }
+  return `body { filter: ${filterCSS} !important; }
 ${mediaSelector} { filter: ${mediaFilter} !important; }
 .${DARK_ISLAND_CLASS}${SPECIFICITY_BOOST} { filter: ${counterInvertFilterCSS()} !important; }
 .${MEDIA_ISLAND_CLASS}${SPECIFICITY_BOOST} { filter: ${mediaFilter} !important; }
