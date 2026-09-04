@@ -30,6 +30,13 @@ import { removeNotification, showNotification } from "./notification";
 
 const domain = normalizeDomain(location.hostname);
 
+// This script also runs inside every iframe (manifest.json's all_frames:
+// true — needed so ad/tracker iframes' own images get counter-inverted
+// too, instead of rendering fully color-inverted with no correction at
+// all). The on-page notification is a page-load UI element, not a
+// per-document one, so it must only ever appear once, from the top frame.
+const IS_TOP_FRAME = window.self === window.top;
+
 let appliedCss: string | null = null;
 
 /**
@@ -123,6 +130,16 @@ const MEDIA_TAGS = ["img", "video", "canvas", "picture", "svg image"];
  */
 const SPECIFICITY_BOOST = ":not(#darkmoon-specificity-boost)";
 
+/**
+ * Plain (unfiltered) fallback for whichever of <html>/<body> ends up
+ * supplying the CSS canvas-background propagation — see the long comment on
+ * the returned rule in buildInjectedCss for the full mechanism. Matches
+ * what a filtered plain-white page already lands on (`invert(white)` is
+ * black), so it reads as a continuation of the normal filtered look rather
+ * than a visibly different fallback color.
+ */
+const CANVAS_FALLBACK_BACKGROUND = "#000";
+
 function buildInjectedCss(filterCSS: string): string {
   const mediaFilter = mediaFilterCSS(MEDIA_DIM_BRIGHTNESS_PERCENT);
   const mediaSelector = MEDIA_TAGS.map((tag) => `${tag}${SPECIFICITY_BOOST}`).join(", ");
@@ -136,23 +153,56 @@ function buildInjectedCss(filterCSS: string): string {
   const darkIslandMediaOverride = overrideSelectorFor([DARK_ISLAND_CLASS]);
   const dimmedIslandMediaOverride = overrideSelectorFor([MEDIA_ISLAND_CLASS, MEDIA_NESTED_ISLAND_CLASS]);
 
-  // The filter goes on <body>, not <html>. They're normally equivalent (body
-  // fills the viewport too) but aren't always: some real sites (e.g. a
-  // classic <body><center><table>-based layout, seen on news.ycombinator.com)
-  // leave <html>/<body> without an explicit background of their own and size
-  // <body> to its (narrower) content instead of the full viewport — and in
-  // that shape, a `filter` on <html> was observed to leave the margin beyond
-  // <body> painted as the browser's plain unfiltered white canvas instead of
-  // inverting it, even though <html>'s own computed background/filter were
-  // both correct. <body> doesn't have that gap. (This does mean the
-  // notification host, mounted on <html> so it works even before <body>
-  // exists, sits outside the filtered subtree now — see notification.ts.)
+  // Iframes (ad slots, embeds, trackers) get this script injected into them
+  // too — manifest.json sets all_frames: true — so each one already darkens
+  // its own document independently and correctly. But the <iframe> element
+  // is *also* a replaced element inside this document, so this page's own
+  // filter composites over its already-correct rendering one more time,
+  // same as it would for an unhandled <img>: a plain counter-invert on the
+  // tag itself (no dim — the frame's own content already handled that)
+  // cancels it back out. Nested inside an island, the ambient cancellation
+  // is already in place, so the override is `none`, not a dim: unlike a raw
+  // <img>, an iframe's content isn't unprocessed pixels that need dimming
+  // applied here — unwinding the local filter back to identity is enough.
+  const iframeSelector = `iframe${SPECIFICITY_BOOST}`;
+  const iframeIslandOverride = [DARK_ISLAND_CLASS, MEDIA_ISLAND_CLASS, MEDIA_NESTED_ISLAND_CLASS]
+    .map((cls) => `.${cls} ${iframeSelector}`)
+    .join(",\n");
+
+  // The filter goes on <body>, not <html> — see the <html> background-color
+  // rule below for why <body> specifically, they're a package deal.
   //
-  // No explicit background-color override here: `filter` transforms
-  // everything the element paints, including its own background-color, so
-  // setting one here would get inverted right along with the filter and
-  // produce the wrong result. Letting the page's real background (default
-  // white if unset) run through the filter is what makes it come out dark.
+  // No explicit background-color on the filtered <body> rule itself:
+  // `filter` transforms everything the element paints, including its own
+  // background-color, so setting one here would get inverted right along
+  // with the filter and produce the wrong result. Letting the page's real
+  // background (default white if unset) run through the filter is what
+  // makes it come out dark.
+  //
+  // <html> DOES get an explicit background-color — deliberately with no
+  // filter of its own. This isn't decorative: per the CSS canvas-background
+  // rule (an element's declared background propagates to fill the whole
+  // viewport when the element above it in the html>body chain has none of
+  // its own), whichever of <html>/<body> ends up supplying that propagated
+  // canvas fill has that specific paint operation happen on a separate
+  // layer that no element's `filter` ever reaches — confirmed by checking
+  // computed styles against actual rendered pixels: `<html>`'s own
+  // background/filter (or <body>'s) can read back exactly as declared while
+  // the pixels themselves still show the page's un-inverted original color,
+  // in the gaps beyond whatever content actually painted something (a
+  // sparse page, one narrower than the viewport like
+  // news.ycombinator.com's centered table, or just the ordinary gaps
+  // between a header/card/etc and the page's own background — this isn't
+  // an edge case, it's most pages). Two things fix it together: (1) an
+  // explicit background-color on <html> takes it out of "has none of its
+  // own" — the propagation precondition — so <body>'s own background-color
+  // stops being commandeered for canvas duty and instead paints normally
+  // as part of <body>'s own box, which the filter *does* reach; (2) using
+  // an already-dark, unfiltered color for <html>'s means that whatever
+  // canvas-propagation gap remains regardless (there's always a first
+  // element in the chain, and Chromium's propagation rule always exempts
+  // whichever one it lands on from filtering) comes out looking right
+  // anyway — filtering it would have been redundant, not required.
   //
   // The island rules below counter-invert already-dark widgets and
   // raster-background-image containers found by islands.ts, so blanket
@@ -171,13 +221,16 @@ function buildInjectedCss(filterCSS: string): string {
   // override to supply the one dim itself, while a media island's filter
   // already *is* a dim, so the override there must supply none of its own
   // — supplying a second dim in that case would double it up.
-  return `body { filter: ${filterCSS} !important; }
+  return `html { background-color: ${CANVAS_FALLBACK_BACKGROUND} !important; }
+body { filter: ${filterCSS} !important; }
 ${mediaSelector} { filter: ${mediaFilter} !important; }
 .${DARK_ISLAND_CLASS}${SPECIFICITY_BOOST} { filter: ${counterInvertFilterCSS()} !important; }
 .${MEDIA_ISLAND_CLASS}${SPECIFICITY_BOOST} { filter: ${mediaFilter} !important; }
 .${MEDIA_NESTED_ISLAND_CLASS}${SPECIFICITY_BOOST} { filter: brightness(${MEDIA_DIM_BRIGHTNESS_PERCENT}%) !important; }
 ${darkIslandMediaOverride} { filter: brightness(${MEDIA_DIM_BRIGHTNESS_PERCENT}%) !important; }
-${dimmedIslandMediaOverride} { filter: none !important; }`;
+${dimmedIslandMediaOverride} { filter: none !important; }
+${iframeSelector} { filter: ${counterInvertFilterCSS()} !important; }
+${iframeIslandOverride} { filter: none !important; }`;
 }
 
 async function applyCss(css: string): Promise<void> {
@@ -248,7 +301,7 @@ async function run(options: { isInitial: boolean; forceRecalculate?: boolean }):
 
   await applyCss(buildInjectedCss(cacheEntry.filterCSS));
 
-  if (options.isInitial) {
+  if (options.isInitial && IS_TOP_FRAME) {
     showNotification(domain, settings.domainOverrides[domain], settings.globalMode, {
       onModeSelect: (mode: Mode | null) => void setDomainOverride(domain, mode),
       onIgnore: () => void addToIgnoreList(domain),

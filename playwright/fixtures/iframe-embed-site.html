@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Site with an embedded iframe fixture</title>
+    <style>
+      body {
+        margin: 0;
+        background: #ffffff;
+        color: #1a1a1a;
+        font-family: sans-serif;
+      }
+      main {
+        padding: 24px;
+      }
+      iframe {
+        border: 1px solid #ccc;
+        width: 200px;
+        height: 100px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>A page embedding a same-origin iframe (stands in for an ad/tracker iframe)</h1>
+      <p>The iframe's own image should be counter-inverted/dimmed too, not left fully color-inverted.</p>
+      <iframe src="iframe-embed-content.html" title="embedded content"></iframe>
+    </main>
+  </body>
+</html>

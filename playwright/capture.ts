@@ -14,6 +14,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type BrowserContext, type Page } from "playwright";
+import { decodePng, getPixel, pixelLightness } from "./png-pixel";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = path.join(ROOT, "dist");
@@ -31,7 +32,24 @@ interface Fixture {
 }
 
 const FIXTURES: Fixture[] = [
-  { name: "light-site", file: "light-site.html", expectDarkened: true },
+  {
+    // DAR-17: a real pixel check, not just a computed-style one — see
+    // pixelLightnessAt's doc comment. (5, 650) is well below this fixture's
+    // short content and clear of the bottom-right notification: a "gap"
+    // relying on the page's own background rather than any specific
+    // element's, exactly the region the canvas-background-propagation bug
+    // left un-inverted despite <body>'s own filter reading back correct.
+    name: "light-site",
+    file: "light-site.html",
+    expectDarkened: true,
+    extraChecks: async (page) => {
+      const lightness = await pixelLightnessAt(page, 5, 650);
+      check(
+        "background in the empty gap below the content is actually dark, not just declared as such",
+        lightness < 60,
+      );
+    },
+  },
   { name: "spa-like", file: "spa-like.html", expectDarkened: true },
   { name: "docs-site", file: "docs-site.html", expectDarkened: true },
   { name: "already-dark-site", file: "already-dark-site.html", expectDarkened: false },
@@ -112,21 +130,70 @@ const FIXTURES: Fixture[] = [
   },
   {
     // DAR-17: a classic <body><center><table>-based layout (news.ycombinator
-    // .com) where html/body never paint a background of their own. A
-    // `filter` on <html> was observed to leave the margin beyond the table
-    // painted as the browser's plain unfiltered white canvas instead of
-    // inverting it, even though <html>'s own computed background/filter
-    // were both correct — a rendering-level gap this project can't assert
-    // on directly (verified visually against the live site instead). This
-    // check guards the part that IS assertable: the filter must live on
-    // <body>, not <html>, which is the actual fix — see buildInjectedCss's
-    // comment in src/content/index.ts.
+    // .com) where html/body never paint a background of their own. The
+    // margin beyond the (narrower-than-viewport) centered table used to
+    // stay the browser's plain unfiltered white canvas — a real rendering
+    // gap (the CSS canvas-background-propagation paint layer) that
+    // getComputedStyle alone can't see, since it read back correct the
+    // whole time; only an actual pixel check catches it. See
+    // buildInjectedCss's comment in src/content/index.ts for the fix.
     name: "narrow-centered-table-site",
     file: "narrow-centered-table-site.html",
     expectDarkened: true,
     extraChecks: async (page) => {
-      const htmlFilter = await page.evaluate(() => getComputedStyle(document.documentElement).filter);
-      check("the filter is NOT on <html> (that's what left HN's margins unfiltered)", htmlFilter === "none");
+      // The table is 500px wide, centered in a 1280px viewport — (20, 50)
+      // is well inside the left margin beyond it, at a height the table
+      // itself spans.
+      const lightness = await pixelLightnessAt(page, 20, 50);
+      check("the margin beyond the centered table is actually dark, not the unfiltered canvas", lightness < 60);
+    },
+  },
+  {
+    // DAR-17: real news sites are full of ad/tracker iframes. The content
+    // script only ran in the top frame before this fixture existed —
+    // manifest.json now sets all_frames: true so it runs inside every
+    // frame too, otherwise an iframe's own images render fully color-
+    // inverted with no correction at all (the top page's filter still
+    // visually composites over embedded frames regardless of whether
+    // anything is running inside them to counter it). This same-origin
+    // iframe stands in for that case — cross-origin ad iframes work the
+    // same way given <all_urls> host permissions, which this project can't
+    // easily fixture (would need a real second origin).
+    name: "iframe-embed-site",
+    file: "iframe-embed-site.html",
+    expectDarkened: true,
+    extraChecks: async (page) => {
+      await page.waitForTimeout(500); // iframe's own content script + css application
+      const frame = page.frames().find((f) => f.url().includes("iframe-embed-content.html"));
+      if (!frame) {
+        check("found the embedded iframe's own frame", false);
+        return;
+      }
+
+      // The iframe's own document is just a normal page from its own point
+      // of view — its .iframe-photo getting the standard dimmed-media
+      // filter (already covered by images-site's assertions) means its
+      // *internal* rendering is self-consistently correct on its own.
+      // What's specific to this fixture is the <iframe> tag itself, as seen
+      // from the PARENT page: it's a replaced element the parent's own
+      // filter composites over, so it needs the same counter-invert
+      // treatment as an unhandled <img> would — checked from the parent,
+      // not from inside the frame (the frame's own filter string will
+      // always mention "invert" as part of its own normal media rule,
+      // which doesn't say anything about the final composited result).
+      const iframeElementFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector("iframe") as Element).filter,
+      );
+      check("the <iframe> element itself is counter-inverted from the parent's side", iframeElementFilter !== "none");
+      check(
+        "the <iframe> counter-invert has no dim of its own (the frame dims its own content already)",
+        !iframeElementFilter.includes("brightness"),
+      );
+
+      const notificationInFrame = await frame.evaluate(
+        () => document.getElementById("darkmoon-notification-host") !== null,
+      );
+      check("no duplicate notification created inside the iframe", !notificationInFrame);
     },
   },
 ];
@@ -205,6 +272,19 @@ async function pageFilter(page: Page): Promise<string> {
 
 async function notificationHostCount(page: Page): Promise<number> {
   return page.locator("#darkmoon-notification-host").count();
+}
+
+/**
+ * Reads the ACTUAL rendered pixel at (x, y), not a computed-style value —
+ * see png-pixel.ts's doc comment for why this matters: DAR-17 found a real
+ * gap between the two (the CSS canvas-background-propagation paint layer),
+ * where computed style read back correct while the pixels themselves still
+ * showed the page's un-inverted original color.
+ */
+async function pixelLightnessAt(page: Page, x: number, y: number): Promise<number> {
+  const buf = await page.screenshot();
+  const img = decodePng(buf);
+  return pixelLightness(getPixel(img, x, y));
 }
 
 async function clickIgnoreInNotification(page: Page): Promise<void> {
