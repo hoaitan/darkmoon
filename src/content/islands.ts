@@ -31,6 +31,29 @@ function isIsland(el: Element): boolean {
 }
 
 /**
+ * Islands are meant to be small, self-contained widgets (a chat box, a code
+ * block, a hero photo) — not page-level wrappers. A dark or background-image
+ * classification on something covering most of the page is far more likely
+ * a root/app-shell container (a loading-state background later covered by
+ * real content, say) than a genuine widget. Marking it would stop the scan
+ * from descending any further into it (see scanForIslands), silently
+ * disabling media dimming for every image on the page — an app root wrapping
+ * the whole document is exactly the shape of element that would otherwise
+ * get caught here. The page-level `isAlreadyDark` check (already run before
+ * any of this) is what's supposed to handle "the whole page is actually
+ * dark" — this is just a backstop against that heuristic escaping its scope.
+ */
+const MAX_ISLAND_AREA_FRACTION = 0.5;
+
+function isTooLargeToBeIsland(el: Element): boolean {
+  const page = document.documentElement;
+  const pageArea = page.scrollWidth * page.scrollHeight;
+  if (pageArea <= 0) return false;
+  const rect = el.getBoundingClientRect();
+  return (rect.width * rect.height) / pageArea > MAX_ISLAND_AREA_FRACTION;
+}
+
+/**
  * Classifies one element and, if it's an island, marks it. Returns whether
  * the element is (now, or already was) an island — callers use this to
  * decide whether to keep descending.
@@ -42,17 +65,15 @@ function classifyAndMark(el: Element): boolean {
     backgroundColor: style.backgroundColor,
     backgroundImage: style.backgroundImage,
   });
-  if (kind === "dark") {
-    el.classList.add(DARK_ISLAND_CLASS);
-    markedElements.add(el);
-    return true;
-  }
-  if (kind === "media") {
-    el.classList.add(MEDIA_ISLAND_CLASS);
-    markedElements.add(el);
-    return true;
-  }
-  return false;
+  if (kind === null) return false;
+  // Bounding-rect check comes after the (cheap) color check and is only
+  // paid by the rare element that already looks like a candidate island —
+  // getBoundingClientRect forces layout, so doing it for every scanned
+  // element regardless of outcome would be needlessly expensive.
+  if (isTooLargeToBeIsland(el)) return false;
+  el.classList.add(kind === "dark" ? DARK_ISLAND_CLASS : MEDIA_ISLAND_CLASS);
+  markedElements.add(el);
+  return true;
 }
 
 /**

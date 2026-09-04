@@ -84,6 +84,27 @@ const FIXTURES: Fixture[] = [
       check("standalone image still gets its own dimmed counter-invert filter", standalonePhotoFilter !== "none");
     },
   },
+  {
+    // DAR-17: a root app-shell wrapper covering ~the whole page (common in
+    // real SPAs — see abc.net.au) has an opaque dark background of its own,
+    // but marking it as an island stops the scan from descending into it at
+    // all, silently disabling media dimming for every image on the page.
+    name: "full-page-dark-wrapper-site",
+    file: "full-page-dark-wrapper-site.html",
+    expectDarkened: true,
+    extraChecks: async (page) => {
+      await page.waitForTimeout(200); // island scan is idle-scheduled
+      const wrapperIsIsland = await page.evaluate(
+        () => document.querySelector("#app-wrapper")?.matches(".darkmoon-island-dark, .darkmoon-island-media") ?? false,
+      );
+      check("full-page wrapper was NOT marked as an island (too large to be a widget)", !wrapperIsIsland);
+
+      const photoFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector(".photo") as Element).filter,
+      );
+      check("photo inside the wrapper still gets the dimmed counter-invert filter", photoFilter !== "none");
+    },
+  },
 ];
 
 let failures = 0;

@@ -102,11 +102,26 @@ function samplePageLightness(): number {
 // island-nested override rule so the two can't silently drift apart.
 const MEDIA_TAGS = ["img", "video", "canvas", "picture", "svg image"];
 
+/**
+ * Appended to every selector below to win CSS specificity fights against a
+ * host page's own `!important` rules on the same elements — real sites
+ * routinely ship `!important` on classed img/media rules (e.g. a blur-up
+ * loading-transition effect), and a plain type selector like `img` loses
+ * that fight even with `!important` on our side too: when both sides are
+ * `!important`, specificity (not `!important`-ness or source order) is the
+ * tiebreaker, and a single class selector (0,1,0) already outranks a bare
+ * type selector (0,0,1). `:not(#<id>)` on an id no real page uses adds
+ * id-level specificity (1,0,0) without changing which elements match —
+ * that beats any realistic combination of classes an author's rule could
+ * use, short of that rule also using an id itself.
+ */
+const SPECIFICITY_BOOST = ":not(#darkmoon-specificity-boost)";
+
 function buildInjectedCss(filterCSS: string): string {
   const mediaFilter = mediaFilterCSS(MEDIA_DIM_BRIGHTNESS_PERCENT);
-  const mediaSelector = MEDIA_TAGS.join(", ");
+  const mediaSelector = MEDIA_TAGS.map((tag) => `${tag}${SPECIFICITY_BOOST}`).join(", ");
   const islandMediaOverrideSelector = [DARK_ISLAND_CLASS, MEDIA_ISLAND_CLASS]
-    .flatMap((cls) => MEDIA_TAGS.map((tag) => `.${cls} ${tag}`))
+    .flatMap((cls) => MEDIA_TAGS.map((tag) => `.${cls} ${tag}${SPECIFICITY_BOOST}`))
     .join(",\n");
 
   // No explicit background-color override here: `filter` transforms
@@ -125,8 +140,8 @@ function buildInjectedCss(filterCSS: string): string {
   // apply a second, unwanted cancellation and re-invert them.
   return `html { filter: ${filterCSS} !important; }
 ${mediaSelector} { filter: ${mediaFilter} !important; }
-.${DARK_ISLAND_CLASS} { filter: ${counterInvertFilterCSS()} !important; }
-.${MEDIA_ISLAND_CLASS} { filter: ${mediaFilter} !important; }
+.${DARK_ISLAND_CLASS}${SPECIFICITY_BOOST} { filter: ${counterInvertFilterCSS()} !important; }
+.${MEDIA_ISLAND_CLASS}${SPECIFICITY_BOOST} { filter: ${mediaFilter} !important; }
 ${islandMediaOverrideSelector} { filter: none !important; }`;
 }
 
