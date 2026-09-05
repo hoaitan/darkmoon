@@ -9,23 +9,9 @@ import {
   setCacheEntry,
   setDomainOverride,
 } from "../lib/storage";
-import {
-  calculateFilter,
-  counterInvertFilterCSS,
-  MEDIA_DIM_BRIGHTNESS_PERCENT,
-  mediaFilterCSS,
-  parseCssColor,
-  relativeLightness,
-} from "../lib/theme-engine";
+import { buildInjectedCss, calculateFilter, parseCssColor, relativeLightness } from "../lib/theme-engine";
 import type { DarkmoonMessage, DarkmoonResponse } from "../lib/messages";
 import type { Mode } from "../lib/types";
-import {
-  DARK_ISLAND_CLASS,
-  MEDIA_ISLAND_CLASS,
-  MEDIA_NESTED_ISLAND_CLASS,
-  startIslandWatch,
-  stopIslandWatch,
-} from "./islands";
 import { removeNotification, showNotification } from "./notification";
 
 const domain = normalizeDomain(location.hostname);
@@ -110,153 +96,31 @@ function samplePageLightness(): number {
   return 1;
 }
 
-// Single source of truth for the media tags the counter-invert/dim
-// treatment applies to — reused for both the plain rule and the
-// island-nested override rule so the two can't silently drift apart.
-const MEDIA_TAGS = ["img", "video", "canvas", "picture", "svg image"];
-
-/**
- * Appended to every selector below to win CSS specificity fights against a
- * host page's own `!important` rules on the same elements — real sites
- * routinely ship `!important` on classed img/media rules (e.g. a blur-up
- * loading-transition effect), and a plain type selector like `img` loses
- * that fight even with `!important` on our side too: when both sides are
- * `!important`, specificity (not `!important`-ness or source order) is the
- * tiebreaker, and a single class selector (0,1,0) already outranks a bare
- * type selector (0,0,1). `:not(#<id>)` on an id no real page uses adds
- * id-level specificity (1,0,0) without changing which elements match —
- * that beats any realistic combination of classes an author's rule could
- * use, short of that rule also using an id itself.
- */
-const SPECIFICITY_BOOST = ":not(#darkmoon-specificity-boost)";
-
-/**
- * Plain (unfiltered) fallback for whichever of <html>/<body> ends up
- * supplying the CSS canvas-background propagation — see the long comment on
- * the returned rule in buildInjectedCss for the full mechanism. Matches
- * what a filtered plain-white page already lands on (`invert(white)` is
- * black), so it reads as a continuation of the normal filtered look rather
- * than a visibly different fallback color.
- */
-const CANVAS_FALLBACK_BACKGROUND = "#000";
-
-function buildInjectedCss(filterCSS: string): string {
-  const mediaFilter = mediaFilterCSS(MEDIA_DIM_BRIGHTNESS_PERCENT);
-  const mediaSelector = MEDIA_TAGS.map((tag) => `${tag}${SPECIFICITY_BOOST}`).join(", ");
-  const overrideSelectorFor = (classes: string[]): string =>
-    classes.flatMap((cls) => MEDIA_TAGS.map((tag) => `.${cls} ${tag}${SPECIFICITY_BOOST}`)).join(",\n");
-  // A dark island applies no dim of its own (just a plain counter-invert),
-  // so nested media needs its own single dim. A media/media-nested island
-  // already applies the dim as part of its own filter, so nested media
-  // inside *that* needs none of its own — see the comment below for why
-  // both forms of nesting still land on exactly one dim overall.
-  const darkIslandMediaOverride = overrideSelectorFor([DARK_ISLAND_CLASS]);
-  const dimmedIslandMediaOverride = overrideSelectorFor([MEDIA_ISLAND_CLASS, MEDIA_NESTED_ISLAND_CLASS]);
-
-  // Iframes (ad slots, embeds, trackers) get this script injected into them
-  // too — manifest.json sets all_frames: true — so each one already darkens
-  // its own document independently and correctly. But the <iframe> element
-  // is *also* a replaced element inside this document, so this page's own
-  // filter composites over its already-correct rendering one more time,
-  // same as it would for an unhandled <img>: a plain counter-invert on the
-  // tag itself (no dim — the frame's own content already handled that)
-  // cancels it back out. Nested inside an island, the ambient cancellation
-  // is already in place, so the override is `none`, not a dim: unlike a raw
-  // <img>, an iframe's content isn't unprocessed pixels that need dimming
-  // applied here — unwinding the local filter back to identity is enough.
-  const iframeSelector = `iframe${SPECIFICITY_BOOST}`;
-  const iframeIslandOverride = [DARK_ISLAND_CLASS, MEDIA_ISLAND_CLASS, MEDIA_NESTED_ISLAND_CLASS]
-    .map((cls) => `.${cls} ${iframeSelector}`)
-    .join(",\n");
-
-  // The filter goes on <body>, not <html> — see the <html> background-color
-  // rule below for why <body> specifically, they're a package deal.
-  //
-  // No explicit background-color on the filtered <body> rule itself:
-  // `filter` transforms everything the element paints, including its own
-  // background-color, so setting one here would get inverted right along
-  // with the filter and produce the wrong result. Letting the page's real
-  // background (default white if unset) run through the filter is what
-  // makes it come out dark.
-  //
-  // <html> DOES get an explicit background-color — deliberately with no
-  // filter of its own. This isn't decorative: per the CSS canvas-background
-  // rule (an element's declared background propagates to fill the whole
-  // viewport when the element above it in the html>body chain has none of
-  // its own), whichever of <html>/<body> ends up supplying that propagated
-  // canvas fill has that specific paint operation happen on a separate
-  // layer that no element's `filter` ever reaches — confirmed by checking
-  // computed styles against actual rendered pixels: `<html>`'s own
-  // background/filter (or <body>'s) can read back exactly as declared while
-  // the pixels themselves still show the page's un-inverted original color,
-  // in the gaps beyond whatever content actually painted something (a
-  // sparse page, one narrower than the viewport like
-  // news.ycombinator.com's centered table, or just the ordinary gaps
-  // between a header/card/etc and the page's own background — this isn't
-  // an edge case, it's most pages). Two things fix it together: (1) an
-  // explicit background-color on <html> takes it out of "has none of its
-  // own" — the propagation precondition — so <body>'s own background-color
-  // stops being commandeered for canvas duty and instead paints normally
-  // as part of <body>'s own box, which the filter *does* reach; (2) using
-  // an already-dark, unfiltered color for <html>'s means that whatever
-  // canvas-propagation gap remains regardless (there's always a first
-  // element in the chain, and Chromium's propagation rule always exempts
-  // whichever one it lands on from filtering) comes out looking right
-  // anyway — filtering it would have been redundant, not required.
-  //
-  // The island rules below counter-invert already-dark widgets and
-  // raster-background-image containers found by islands.ts, so blanket
-  // inversion doesn't blow them out — see classifyElementBackground's doc
-  // comment for why. `.darkmoon-island-media-nested` is the same idea one
-  // level deeper: a background-image container *inside* an already-
-  // cancelled zone (say, a photo panel inside a dark-themed app shell)
-  // doesn't need — and mustn't get — a second counter-invert layered on
-  // top of the one already in effect, just the dim; see islands.ts's
-  // `classify` for the full reasoning.
-  //
-  // The two override blocks below give nested img/video/etc exactly one
-  // dim no matter which kind of island it's inside: composed with the
-  // *two* invert layers that cancel around it (its island ancestor's, and
-  // body's), a dark island's plain counter-invert (no dim) needs the
-  // override to supply the one dim itself, while a media island's filter
-  // already *is* a dim, so the override there must supply none of its own
-  // — supplying a second dim in that case would double it up.
-  return `html { background-color: ${CANVAS_FALLBACK_BACKGROUND} !important; }
-body { filter: ${filterCSS} !important; }
-${mediaSelector} { filter: ${mediaFilter} !important; }
-.${DARK_ISLAND_CLASS}${SPECIFICITY_BOOST} { filter: ${counterInvertFilterCSS()} !important; }
-.${MEDIA_ISLAND_CLASS}${SPECIFICITY_BOOST} { filter: ${mediaFilter} !important; }
-.${MEDIA_NESTED_ISLAND_CLASS}${SPECIFICITY_BOOST} { filter: brightness(${MEDIA_DIM_BRIGHTNESS_PERCENT}%) !important; }
-${darkIslandMediaOverride} { filter: brightness(${MEDIA_DIM_BRIGHTNESS_PERCENT}%) !important; }
-${dimmedIslandMediaOverride} { filter: none !important; }
-${iframeSelector} { filter: ${counterInvertFilterCSS()} !important; }
-${iframeIslandOverride} { filter: none !important; }`;
-}
-
 async function applyCss(css: string): Promise<void> {
   if (appliedCss === css) return;
+  const superseded = appliedCss;
   const response = (await chrome.runtime.sendMessage({ type: "darkmoon/apply-css", css } satisfies DarkmoonMessage)) as
     DarkmoonResponse | undefined;
-  if (response?.ok) {
-    appliedCss = css;
-    startIslandWatch();
+  if (!response?.ok) return;
+  appliedCss = css;
+
+  // Drop the sheet we just replaced. Insert-then-remove rather than the
+  // reverse: removing first would leave the page briefly unstyled (a white
+  // flash) across the round-trip to the background worker. Leaving it
+  // inserted isn't an option either — the two sheets' media rules have
+  // identical specificity, so which one wins would come down to insertion
+  // order, and a stale dim-only rule could end up beating the live
+  // counter-invert (or vice versa) after a mode switch.
+  if (superseded) {
+    await chrome.runtime.sendMessage({ type: "darkmoon/remove-css", css: superseded } satisfies DarkmoonMessage);
   }
 }
 
 async function removeCss(): Promise<void> {
-  if (!appliedCss) {
-    stopIslandWatch();
-    return;
-  }
+  if (!appliedCss) return;
   const css = appliedCss;
   appliedCss = null;
-  // Wait for the filter CSS to actually be gone before stripping island
-  // marks: island elements have no styling of their own without their
-  // `.darkmoon-island-*` class (it's what opts them out of the page filter),
-  // so unmarking them first would flash them fully inverted for the
-  // duration of this round-trip to the background worker.
   await chrome.runtime.sendMessage({ type: "darkmoon/remove-css", css } satisfies DarkmoonMessage);
-  stopIslandWatch();
 }
 
 async function run(options: { isInitial: boolean; forceRecalculate?: boolean }): Promise<void> {
@@ -275,7 +139,7 @@ async function run(options: { isInitial: boolean; forceRecalculate?: boolean }):
     prefersDark,
   });
 
-  if (action === "light") {
+  if (action === "original") {
     await removeCss();
     removeNotification();
     return;
@@ -294,14 +158,12 @@ async function run(options: { isInitial: boolean; forceRecalculate?: boolean }):
     await setCacheEntry(domain, cacheEntry);
   }
 
-  if (cacheEntry.isAlreadyDark) {
-    await removeCss();
-    return;
-  }
+  await applyCss(buildInjectedCss(cacheEntry));
 
-  await applyCss(buildInjectedCss(cacheEntry.filterCSS));
-
-  if (options.isInitial && IS_TOP_FRAME) {
+  // Only announce an actual darkening. On an already-dark site all we did
+  // was take the glare off its photos, which isn't a change worth a
+  // notification — and "Darkened <domain>" would be a lie.
+  if (!cacheEntry.isAlreadyDark && options.isInitial && IS_TOP_FRAME) {
     showNotification(domain, settings.domainOverrides[domain], settings.globalMode, {
       onModeSelect: (mode: Mode | null) => void setDomainOverride(domain, mode),
       onIgnore: () => void addToIgnoreList(domain),

@@ -2,8 +2,8 @@ import { getSettings, onSettingsChanged } from "../lib/storage";
 import { DEFAULT_SETTINGS, type Mode } from "../lib/types";
 import type { DarkmoonMessage, DarkmoonResponse } from "../lib/messages";
 
-const BADGE_TEXT: Record<Mode, string> = { light: "L", dark: "D", auto: "" };
-const BADGE_COLOR: Record<Mode, string> = { light: "#9CA3AF", dark: "#2D2B55", auto: "#4A9FEF" };
+const BADGE_TEXT: Record<Mode, string> = { original: "O", dark: "D", auto: "" };
+const BADGE_COLOR: Record<Mode, string> = { original: "#9CA3AF", dark: "#2D2B55", auto: "#4A9FEF" };
 
 async function updateBadge(): Promise<void> {
   const settings = await getSettings();

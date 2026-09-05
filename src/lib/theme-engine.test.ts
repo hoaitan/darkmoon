@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   ALREADY_DARK_LIGHTNESS_THRESHOLD,
+  buildInjectedCss,
   calculateFilter,
-  classifyElementBackground,
   counterInvertFilterCSS,
   isAlreadyDark,
+  MEDIA_DIM_BRIGHTNESS_PERCENT,
+  MEDIA_TAGS,
   mediaFilterCSS,
   parseCssColor,
   relativeLightness,
@@ -76,7 +78,7 @@ describe("counterInvertFilterCSS", () => {
 describe("mediaFilterCSS", () => {
   it("puts brightness before invert/hue-rotate, not after", () => {
     // Order is load-bearing, not stylistic: composed with the page-level
-    // invert+hue-rotate on <html>, "brightness(B%) invert(1) hue-rotate(180deg)"
+    // invert+hue-rotate on <body>, "brightness(B%) invert(1) hue-rotate(180deg)"
     // works out to a clean `x * B` on the original color (a real dim), while
     // putting brightness *after* the invert/hue-rotate pair works out to
     // `1 - B*(1-x)` instead — that lifts shadows toward gray rather than
@@ -89,57 +91,95 @@ describe("mediaFilterCSS", () => {
   });
 });
 
-describe("classifyElementBackground", () => {
-  it("classifies an opaque, below-threshold background as an already-dark island", () => {
-    expect(classifyElementBackground({ backgroundColor: "rgb(20, 20, 20)", backgroundImage: "none" })).toBe("dark");
+describe("MEDIA_TAGS", () => {
+  it("excludes <picture>, which always wraps the <img> already in the list", () => {
+    // A <picture> is nothing but a wrapper for <source>s plus a mandatory
+    // <img>, so listing both matched the same photo twice and stacked two
+    // counter-inverts on top of the page's one — three inversions, which is
+    // odd, so the image rendered as a negative. Real case: 14 of
+    // abc.net.au's 119 images.
+    expect(MEDIA_TAGS).not.toContain("picture");
   });
 
-  it("does not classify a light background as dark", () => {
-    expect(classifyElementBackground({ backgroundColor: "rgb(240, 240, 240)", backgroundImage: "none" })).toBeNull();
+  it("lists no tag that can contain another tag in the list", () => {
+    // The invariant the <picture> bug violated. Anything here that can wrap
+    // another entry double-applies the media filter to the same pixels.
+    const canContainOtherElements = new Set(["picture", "object", "video", "audio", "svg"]);
+    const offenders = MEDIA_TAGS.filter((tag) => canContainOtherElements.has(tag) && tag !== "svg image");
+    expect(offenders).toEqual(["video"]);
+    // <video> stays: its only legal element children are <source>/<track>,
+    // neither of which this list matches.
+  });
+});
+
+describe("buildInjectedCss", () => {
+  const PAGE_FILTER = "invert(1) hue-rotate(180deg) brightness(100%) contrast(100%) sepia(0%)";
+  const lightPageCss = (): string => buildInjectedCss({ filterCSS: PAGE_FILTER, isAlreadyDark: false });
+  const darkPageCss = (): string => buildInjectedCss({ filterCSS: "", isAlreadyDark: true });
+
+  describe("on a light page it darkens", () => {
+    it("puts the page filter on <body>, never on <html>", () => {
+      // <html> carries the canvas-background propagation paint, which no
+      // element's filter reaches — see the rule's comment for the full
+      // mechanism.
+      expect(lightPageCss()).toContain(`body { filter: ${PAGE_FILTER} !important; }`);
+      expect(lightPageCss()).not.toContain(`html { filter:`);
+    });
+
+    it("gives <html> an unfiltered dark background so canvas gaps aren't left white", () => {
+      expect(lightPageCss()).toContain("html { background-color: #000 !important; }");
+    });
+
+    it("counter-inverts and dims every media tag", () => {
+      const css = lightPageCss();
+      for (const tag of MEDIA_TAGS) {
+        expect(css).toContain(`${tag}:not(#darkmoon-specificity-boost)`);
+      }
+      expect(css).toContain(`filter: ${mediaFilterCSS(MEDIA_DIM_BRIGHTNESS_PERCENT)} !important;`);
+    });
+
+    it("counter-inverts iframes without dimming them", () => {
+      // The frame runs this same content script and already dimmed its own
+      // images; dimming the <iframe> element too would double it up.
+      expect(lightPageCss()).toContain(
+        `iframe:not(#darkmoon-specificity-boost) { filter: ${counterInvertFilterCSS()} !important; }`,
+      );
+    });
   });
 
-  it("ignores a transparent dark-looking color — nothing was actually painted", () => {
-    expect(classifyElementBackground({ backgroundColor: "rgba(20, 20, 20, 0)", backgroundImage: "none" })).toBeNull();
+  describe("on an already-dark page it leaves alone", () => {
+    it("dims media with brightness only — no invert, no hue-rotate", () => {
+      // There's no page-level filter to cancel here, so the counter-invert
+      // that a light page needs would actively break these images.
+      const css = darkPageCss();
+      expect(css).toContain(`filter: brightness(${MEDIA_DIM_BRIGHTNESS_PERCENT}%) !important;`);
+      expect(css).not.toContain("invert(");
+      expect(css).not.toContain("hue-rotate(");
+    });
+
+    it("dims every media tag", () => {
+      const css = darkPageCss();
+      for (const tag of MEDIA_TAGS) {
+        expect(css).toContain(`${tag}:not(#darkmoon-specificity-boost)`);
+      }
+    });
+
+    it("touches neither <html> nor <body>", () => {
+      expect(darkPageCss()).not.toContain("html {");
+      expect(darkPageCss()).not.toContain("body {");
+    });
+
+    it("leaves iframes alone — their own document dims its own images", () => {
+      expect(darkPageCss()).not.toContain("iframe");
+    });
   });
 
-  it("ignores a low-alpha dark tint — a shadow/hover wash, not an opaque dark surface", () => {
-    expect(classifyElementBackground({ backgroundColor: "rgba(20, 20, 20, 0.2)", backgroundImage: "none" })).toBeNull();
-  });
-
-  it("classifies a majority-opaque dark background (e.g. a modal backdrop) as dark", () => {
-    expect(classifyElementBackground({ backgroundColor: "rgba(20, 20, 20, 0.5)", backgroundImage: "none" })).toBe(
-      "dark",
+  it("honours a custom dim percentage on both branches", () => {
+    expect(buildInjectedCss({ filterCSS: PAGE_FILTER, isAlreadyDark: false, dimBrightnessPercent: 70 })).toContain(
+      "brightness(70%) invert(1) hue-rotate(180deg)",
     );
-  });
-
-  it("classifies a raster background-image as a media island", () => {
-    expect(
-      classifyElementBackground({
-        backgroundColor: "rgba(0, 0, 0, 0)",
-        backgroundImage: 'url("https://example.com/hero.jpg")',
-      }),
-    ).toBe("media");
-  });
-
-  it("does not classify a gradient-only background-image as media", () => {
-    expect(
-      classifyElementBackground({
-        backgroundColor: "rgba(0, 0, 0, 0)",
-        backgroundImage: "linear-gradient(rgb(0, 0, 0), rgb(255, 255, 255))",
-      }),
-    ).toBeNull();
-  });
-
-  it("prefers the dark classification when both a dark background and an image are present", () => {
-    expect(
-      classifyElementBackground({
-        backgroundColor: "rgb(10, 10, 10)",
-        backgroundImage: 'url("https://example.com/texture.png")',
-      }),
-    ).toBe("dark");
-  });
-
-  it("returns null for an unstyled element (no color, no image)", () => {
-    expect(classifyElementBackground({ backgroundColor: "rgba(0, 0, 0, 0)", backgroundImage: "none" })).toBeNull();
+    expect(buildInjectedCss({ filterCSS: "", isAlreadyDark: true, dimBrightnessPercent: 70 })).toContain(
+      "filter: brightness(70%) !important;",
+    );
   });
 });

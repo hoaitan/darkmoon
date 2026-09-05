@@ -52,7 +52,26 @@ const FIXTURES: Fixture[] = [
   },
   { name: "spa-like", file: "spa-like.html", expectDarkened: true },
   { name: "docs-site", file: "docs-site.html", expectDarkened: true },
-  { name: "already-dark-site", file: "already-dark-site.html", expectDarkened: false },
+  {
+    // DAR-18: an already-dark site keeps its own colors — no page filter — but
+    // its photos now get a brightness dim so they don't glare against it.
+    // Brightness only: there is no page filter to cancel, so an invert here
+    // would turn every photo into a negative.
+    name: "already-dark-site",
+    file: "already-dark-site.html",
+    expectDarkened: false,
+    extraChecks: async (page) => {
+      const photoFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector(".dark-photo") as Element).filter,
+      );
+      check("photo on an already-dark page is dimmed", photoFilter.includes("brightness"));
+      check("photo on an already-dark page is not inverted", !photoFilter.includes("invert"));
+      check("photo on an already-dark page is not hue-rotated", !photoFilter.includes("hue-rotate"));
+
+      const bodyFilter = await page.evaluate(() => getComputedStyle(document.body).filter);
+      check("already-dark page itself is left completely alone", bodyFilter === "none");
+    },
+  },
   {
     name: "already-dark-external-css-site",
     file: "already-dark-external-css-site.html",
@@ -64,68 +83,74 @@ const FIXTURES: Fixture[] = [
     expectDarkened: false,
   },
   {
-    // DAR-17: an already-dark embedded widget on an otherwise light page
-    // should be left alone (counter-inverted), not blown out to light.
+    // DAR-18: an already-dark embedded widget on an otherwise light page is
+    // now inverted along with everything else and comes out light. Knowingly
+    // accepted: one flag governs the whole document, and exempting a widget
+    // requires the per-element classification that flag replaced. Kept as a
+    // fixture so the screenshot records what it looks like.
     name: "already-dark-widget-site",
     file: "already-dark-widget-site.html",
     expectDarkened: true,
     extraChecks: async (page) => {
-      await page.waitForTimeout(200); // island scan is idle-scheduled
-      const isIsland = await page.evaluate(
-        () => document.querySelector(".widget")?.classList.contains("darkmoon-island-dark") ?? false,
+      const widgetFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector(".widget") as Element).filter,
       );
-      check("already-dark widget was marked as an island (excluded from inversion)", isIsland);
+      check("embedded dark widget gets no filter of its own — the page filter governs it", widgetFilter === "none");
     },
   },
   {
-    // DAR-17: a CSS background-image isn't caught by the img/video/canvas/
-    // picture tag selector, and an image nested inside one shouldn't get
-    // double-cancelled back to fully inverted.
+    // DAR-18: every <img> on a darkened page gets exactly one counter-invert,
+    // however it is wrapped. A <picture> parent used to add a second one.
     name: "images-site",
     file: "images-site.html",
     expectDarkened: true,
     extraChecks: async (page) => {
-      await page.waitForTimeout(200); // island scan is idle-scheduled
-      const isMediaIsland = await page.evaluate(
-        () => document.querySelector(".hero")?.classList.contains("darkmoon-island-media") ?? false,
+      const filters = await page.evaluate(() =>
+        [".standalone-photo", ".hero-photo", ".picture-photo"].map((sel) => ({
+          sel,
+          filter: getComputedStyle(document.querySelector(sel) as Element).filter,
+        })),
       );
-      check("background-image container was marked as a media island", isMediaIsland);
+      for (const { sel, filter } of filters) {
+        check(`${sel} gets its own dimmed counter-invert filter`, filter.includes("invert"));
+        check(`${sel} is inverted exactly once, not stacked`, (filter.match(/invert\(/g) ?? []).length === 1);
+      }
 
-      const heroPhotoFilter = await page.evaluate(
-        () => getComputedStyle(document.querySelector(".hero-photo") as Element).filter,
+      // The <picture> wrapper itself must contribute nothing — it paints no
+      // pixels of its own, and filtering it double-inverts the <img> inside.
+      const pictureFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector("picture") as Element).filter,
       );
-      check("image nested inside a media island isn't double-filtered back to inverted", heroPhotoFilter === "none");
+      check("<picture> wrapper gets no filter of its own", pictureFilter === "none");
 
-      const standalonePhotoFilter = await page.evaluate(
-        () => getComputedStyle(document.querySelector(".standalone-photo") as Element).filter,
+      // Knowingly accepted with island removal: a CSS background-image is not
+      // a replaced element, so no blanket selector can reach it and it renders
+      // color-inverted. Asserted so the regression is deliberate, not silent.
+      const heroBackgroundFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector(".hero") as Element).filter,
       );
-      check("standalone image still gets its own dimmed counter-invert filter", standalonePhotoFilter !== "none");
+      check("background-image container is knowingly left to the page filter", heroBackgroundFilter === "none");
     },
   },
   {
-    // DAR-17: a root app-shell wrapper covering ~the whole page (common in
-    // real SPAs — see abc.net.au) has an opaque dark background of its own
-    // and should be preserved as an island (it's genuinely, intentionally
-    // dark) — but doing that used to also stop the scan from descending any
-    // further, leaving every image inside completely un-dimmed. Fixed by
-    // having islands.ts keep descending past a dark island instead of
-    // stopping there, giving nested media its own single dim via
-    // buildInjectedCss's dark-island override rule.
+    // DAR-18: a root app-shell wrapper with its own opaque dark background
+    // (common in real SPAs — see abc.net.au). html/body are still light, so
+    // the site-wide flag says "light" and the wrapper inverts with everything
+    // else. Nothing special happens to it or to the photo inside, which is the
+    // point: no per-element decision is made anywhere on the page.
     name: "full-page-dark-wrapper-site",
     file: "full-page-dark-wrapper-site.html",
     expectDarkened: true,
     extraChecks: async (page) => {
-      await page.waitForTimeout(200); // island scan is idle-scheduled
-      const wrapperIsIsland = await page.evaluate(
-        () => document.querySelector("#app-wrapper")?.classList.contains("darkmoon-island-dark") ?? false,
+      const wrapperFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector("#app-wrapper") as Element).filter,
       );
-      check("full-page wrapper IS marked as an island (its own dark background is preserved)", wrapperIsIsland);
+      check("app-shell wrapper gets no filter of its own", wrapperFilter === "none");
 
       const photoFilter = await page.evaluate(
         () => getComputedStyle(document.querySelector(".photo") as Element).filter,
       );
-      check("photo inside the wrapper is dimmed, not left untouched", photoFilter !== "none");
-      check("photo inside the wrapper is dimmed, not inverted", !photoFilter.includes("invert"));
+      check("photo inside the wrapper gets one counter-invert", (photoFilter.match(/invert\(/g) ?? []).length === 1);
     },
   },
   {

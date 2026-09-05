@@ -7,7 +7,7 @@ export interface ResolveModeInput {
   prefersDark: boolean;
 }
 
-export type ResolvedAction = "light" | "dark";
+export type ResolvedAction = "original" | "dark";
 
 /**
  * effective mode = domainOverrides[domain] ?? globalMode; auto resolves
@@ -16,7 +16,7 @@ export type ResolvedAction = "light" | "dark";
 export function resolveEffectiveMode({ globalMode, domainOverride, prefersDark }: ResolveModeInput): ResolvedAction {
   const mode = domainOverride ?? globalMode;
   if (mode === "auto") {
-    return prefersDark ? "dark" : "light";
+    return prefersDark ? "dark" : "original";
   }
   return mode;
 }

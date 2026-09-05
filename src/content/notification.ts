@@ -109,7 +109,7 @@ function template(domain: string, currentOverride: Mode | undefined, globalMode:
       <div class="row controls">
         <select data-role="mode-select" aria-label="Mode for this site">
           ${option("default", `Default (${globalMode})`)}
-          ${option("light", "Light")}
+          ${option("original", "Original")}
           ${option("dark", "Dark")}
           ${option("auto", "Auto")}
         </select>
