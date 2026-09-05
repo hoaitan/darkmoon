@@ -4,21 +4,23 @@ import { isDomainIgnored, resolveEffectiveMode } from "./mode-resolution";
 describe("resolveEffectiveMode", () => {
   it("honors an explicit global mode regardless of device preference", () => {
     expect(resolveEffectiveMode({ globalMode: "dark", domainOverride: undefined, prefersDark: false })).toBe("dark");
-    expect(resolveEffectiveMode({ globalMode: "light", domainOverride: undefined, prefersDark: true })).toBe("light");
+    expect(resolveEffectiveMode({ globalMode: "original", domainOverride: undefined, prefersDark: true })).toBe(
+      "original",
+    );
   });
 
   it("resolves auto against the device color-scheme preference", () => {
     expect(resolveEffectiveMode({ globalMode: "auto", domainOverride: undefined, prefersDark: true })).toBe("dark");
-    expect(resolveEffectiveMode({ globalMode: "auto", domainOverride: undefined, prefersDark: false })).toBe("light");
+    expect(resolveEffectiveMode({ globalMode: "auto", domainOverride: undefined, prefersDark: false })).toBe("original");
   });
 
   it("lets a domain override win over the global mode", () => {
-    expect(resolveEffectiveMode({ globalMode: "light", domainOverride: "dark", prefersDark: false })).toBe("dark");
-    expect(resolveEffectiveMode({ globalMode: "dark", domainOverride: "light", prefersDark: true })).toBe("light");
+    expect(resolveEffectiveMode({ globalMode: "original", domainOverride: "dark", prefersDark: false })).toBe("dark");
+    expect(resolveEffectiveMode({ globalMode: "dark", domainOverride: "original", prefersDark: true })).toBe("original");
   });
 
   it("resolves a domain override of auto against device preference too", () => {
-    expect(resolveEffectiveMode({ globalMode: "dark", domainOverride: "auto", prefersDark: false })).toBe("light");
+    expect(resolveEffectiveMode({ globalMode: "dark", domainOverride: "auto", prefersDark: false })).toBe("original");
   });
 });
 

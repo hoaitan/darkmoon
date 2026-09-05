@@ -13,10 +13,38 @@ function warnStorageFailure(context: string, err: unknown): void {
   console.warn(`[darkmoon] ${context} — continuing without persisting`, err);
 }
 
+/**
+ * Mode names this extension used to write, mapped to what they're called
+ * now. `"light"` became `"original"` when the mode stopped being "a light
+ * theme" and became "do nothing at all".
+ */
+const LEGACY_MODE_NAMES: Record<string, Mode> = { light: "original" };
+
+function currentModeName(mode: Mode): Mode {
+  return LEGACY_MODE_NAMES[mode] ?? mode;
+}
+
+/**
+ * Settings live in chrome.storage.sync and survive extension updates, so a
+ * user who picked the old mode still has its old string on disk. Renaming it
+ * on read (rather than rewriting storage on every load) is enough: the value
+ * is idempotent, and the next write of either field persists the new name
+ * anyway. Without this the stale name matches no branch in
+ * resolveEffectiveMode and the page ends up unfiltered by accident rather
+ * than by choice.
+ */
+export function migrateStoredSettings(stored: Settings): Settings {
+  const domainOverrides: Record<string, Mode> = {};
+  for (const [domain, mode] of Object.entries(stored.domainOverrides ?? {})) {
+    domainOverrides[domain] = currentModeName(mode);
+  }
+  return { ...stored, globalMode: currentModeName(stored.globalMode), domainOverrides };
+}
+
 export async function getSettings(): Promise<Settings> {
   try {
     const stored = await chrome.storage.sync.get(DEFAULT_SETTINGS);
-    return stored as Settings;
+    return migrateStoredSettings(stored as Settings);
   } catch (err) {
     warnStorageFailure("chrome.storage.sync read failed", err);
     return DEFAULT_SETTINGS;

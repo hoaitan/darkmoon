@@ -1,7 +1,7 @@
 # Darkmoon 🌙
 
 A Chrome extension (Manifest V3) that darkens any website on the fly, using an adaptive CSS-filter
-theme engine — Light / Dark / Auto modes, per-domain overrides, an on-page notification, and
+theme engine — Original / Dark / Auto modes, per-domain overrides, an on-page notification, and
 settings synced across devices via `chrome.storage.sync`.
 
 This repo currently ships **Phase 1: the core extension**. Community theme lists and
@@ -16,7 +16,17 @@ epic in Retask for the full architecture and roadmap.
 - **Content script** (`src/content`) — runs on every page at `document_start`: resolves the
   effective mode (domain override → global mode → device `prefers-color-scheme`), samples the
   page's background lightness on first visit, computes/caches an invert+hue-rotate filter, and
-  renders the top-right notification inside a Shadow DOM root.
+  renders the bottom-right notification inside a Shadow DOM root.
+
+  One sampled flag governs the whole document. A page is either already dark or it isn't, and
+  every element follows that one decision — there is no per-element classification. The only
+  per-tag rule is mechanical: a CSS `filter` on `<body>` transforms everything inside it and
+  cannot be opted out of, so elements that paint their own pixels (`img`, `video`, `canvas`,
+  `svg image`) get the filter cancelled back off them. On a page that is already dark there is
+  no filter to cancel, so those tags get a plain brightness dim instead — enough to stop photos
+  glaring against a dark page. Two known trade-offs of keeping it to one flag: an already-dark
+  widget on a light page inverts along with the page, and a photo painted via CSS
+  `background-image` renders inverted (no selector can reach it without per-element scanning).
 - **Toolbar popup** (`src/popup`) — global mode switch, per-site override/ignore, recalculate.
 - **Options page** (`src/options`) — global mode, brightness/contrast/sepia sliders, and
   per-site override/ignore-list management.

@@ -19,7 +19,7 @@ const MOCK_SETTINGS: Settings = {
   globalMode: "dark",
   filterSettings: { brightness: 100, contrast: 110, sepia: 8 },
   ignoreList: ["news.ycombinator.com"],
-  domainOverrides: { "github.com": "light" },
+  domainOverrides: { "github.com": "original" },
 };
 
 const MOCK_THEME_CACHE = {

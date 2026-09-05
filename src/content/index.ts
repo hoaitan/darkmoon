@@ -9,12 +9,19 @@ import {
   setCacheEntry,
   setDomainOverride,
 } from "../lib/storage";
-import { calculateFilter, counterInvertFilterCSS, parseCssColor, relativeLightness } from "../lib/theme-engine";
+import { buildInjectedCss, calculateFilter, parseCssColor, relativeLightness } from "../lib/theme-engine";
 import type { DarkmoonMessage, DarkmoonResponse } from "../lib/messages";
 import type { Mode } from "../lib/types";
 import { removeNotification, showNotification } from "./notification";
 
 const domain = normalizeDomain(location.hostname);
+
+// This script also runs inside every iframe (manifest.json's all_frames:
+// true — needed so ad/tracker iframes' own images get counter-inverted
+// too, instead of rendering fully color-inverted with no correction at
+// all). The on-page notification is a page-load UI element, not a
+// per-document one, so it must only ever appear once, from the top frame.
+const IS_TOP_FRAME = window.self === window.top;
 
 let appliedCss: string | null = null;
 
@@ -89,21 +96,24 @@ function samplePageLightness(): number {
   return 1;
 }
 
-function buildInjectedCss(filterCSS: string): string {
-  // No explicit background-color override here: `filter` transforms
-  // everything the element paints, including its own background-color, so
-  // setting one here would get inverted right along with the filter and
-  // produce the wrong result. Letting the page's real background (default
-  // white if unset) run through the filter is what makes it come out dark.
-  return `html { filter: ${filterCSS} !important; }
-img, video, canvas, picture, svg image { filter: ${counterInvertFilterCSS()} !important; }`;
-}
-
 async function applyCss(css: string): Promise<void> {
   if (appliedCss === css) return;
+  const superseded = appliedCss;
   const response = (await chrome.runtime.sendMessage({ type: "darkmoon/apply-css", css } satisfies DarkmoonMessage)) as
     DarkmoonResponse | undefined;
-  if (response?.ok) appliedCss = css;
+  if (!response?.ok) return;
+  appliedCss = css;
+
+  // Drop the sheet we just replaced. Insert-then-remove rather than the
+  // reverse: removing first would leave the page briefly unstyled (a white
+  // flash) across the round-trip to the background worker. Leaving it
+  // inserted isn't an option either — the two sheets' media rules have
+  // identical specificity, so which one wins would come down to insertion
+  // order, and a stale dim-only rule could end up beating the live
+  // counter-invert (or vice versa) after a mode switch.
+  if (superseded) {
+    await chrome.runtime.sendMessage({ type: "darkmoon/remove-css", css: superseded } satisfies DarkmoonMessage);
+  }
 }
 
 async function removeCss(): Promise<void> {
@@ -129,7 +139,7 @@ async function run(options: { isInitial: boolean; forceRecalculate?: boolean }):
     prefersDark,
   });
 
-  if (action === "light") {
+  if (action === "original") {
     await removeCss();
     removeNotification();
     return;
@@ -148,14 +158,12 @@ async function run(options: { isInitial: boolean; forceRecalculate?: boolean }):
     await setCacheEntry(domain, cacheEntry);
   }
 
-  if (cacheEntry.isAlreadyDark) {
-    await removeCss();
-    return;
-  }
+  await applyCss(buildInjectedCss(cacheEntry));
 
-  await applyCss(buildInjectedCss(cacheEntry.filterCSS));
-
-  if (options.isInitial) {
+  // Only announce an actual darkening. On an already-dark site all we did
+  // was take the glare off its photos, which isn't a change worth a
+  // notification — and "Darkened <domain>" would be a lie.
+  if (!cacheEntry.isAlreadyDark && options.isInitial && IS_TOP_FRAME) {
     showNotification(domain, settings.domainOverrides[domain], settings.globalMode, {
       onModeSelect: (mode: Mode | null) => void setDomainOverride(domain, mode),
       onIgnore: () => void addToIgnoreList(domain),

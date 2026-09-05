@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   ALREADY_DARK_LIGHTNESS_THRESHOLD,
+  buildInjectedCss,
   calculateFilter,
   counterInvertFilterCSS,
   isAlreadyDark,
+  MEDIA_DIM_BRIGHTNESS_PERCENT,
+  MEDIA_TAGS,
+  mediaFilterCSS,
   parseCssColor,
   relativeLightness,
 } from "./theme-engine";
@@ -68,5 +72,114 @@ describe("calculateFilter", () => {
 describe("counterInvertFilterCSS", () => {
   it("double-inverts to cancel the page-level filter for media elements", () => {
     expect(counterInvertFilterCSS()).toBe("invert(1) hue-rotate(180deg)");
+  });
+});
+
+describe("mediaFilterCSS", () => {
+  it("puts brightness before invert/hue-rotate, not after", () => {
+    // Order is load-bearing, not stylistic: composed with the page-level
+    // invert+hue-rotate on <body>, "brightness(B%) invert(1) hue-rotate(180deg)"
+    // works out to a clean `x * B` on the original color (a real dim), while
+    // putting brightness *after* the invert/hue-rotate pair works out to
+    // `1 - B*(1-x)` instead — that lifts shadows toward gray rather than
+    // pulling highlights down, which is the opposite of "less light".
+    expect(mediaFilterCSS(90)).toBe("brightness(90%) invert(1) hue-rotate(180deg)");
+  });
+
+  it("is a no-op dim at 100%, equivalent to the plain counter-invert", () => {
+    expect(mediaFilterCSS(100)).toBe(`brightness(100%) ${counterInvertFilterCSS()}`);
+  });
+});
+
+describe("MEDIA_TAGS", () => {
+  it("excludes <picture>, which always wraps the <img> already in the list", () => {
+    // A <picture> is nothing but a wrapper for <source>s plus a mandatory
+    // <img>, so listing both matched the same photo twice and stacked two
+    // counter-inverts on top of the page's one — three inversions, which is
+    // odd, so the image rendered as a negative. Real case: 14 of
+    // abc.net.au's 119 images.
+    expect(MEDIA_TAGS).not.toContain("picture");
+  });
+
+  it("lists no tag that can contain another tag in the list", () => {
+    // The invariant the <picture> bug violated. Anything here that can wrap
+    // another entry double-applies the media filter to the same pixels.
+    const canContainOtherElements = new Set(["picture", "object", "video", "audio", "svg"]);
+    const offenders = MEDIA_TAGS.filter((tag) => canContainOtherElements.has(tag) && tag !== "svg image");
+    expect(offenders).toEqual(["video"]);
+    // <video> stays: its only legal element children are <source>/<track>,
+    // neither of which this list matches.
+  });
+});
+
+describe("buildInjectedCss", () => {
+  const PAGE_FILTER = "invert(1) hue-rotate(180deg) brightness(100%) contrast(100%) sepia(0%)";
+  const lightPageCss = (): string => buildInjectedCss({ filterCSS: PAGE_FILTER, isAlreadyDark: false });
+  const darkPageCss = (): string => buildInjectedCss({ filterCSS: "", isAlreadyDark: true });
+
+  describe("on a light page it darkens", () => {
+    it("puts the page filter on <body>, never on <html>", () => {
+      // <html> carries the canvas-background propagation paint, which no
+      // element's filter reaches — see the rule's comment for the full
+      // mechanism.
+      expect(lightPageCss()).toContain(`body { filter: ${PAGE_FILTER} !important; }`);
+      expect(lightPageCss()).not.toContain(`html { filter:`);
+    });
+
+    it("gives <html> an unfiltered dark background so canvas gaps aren't left white", () => {
+      expect(lightPageCss()).toContain("html { background-color: #000 !important; }");
+    });
+
+    it("counter-inverts and dims every media tag", () => {
+      const css = lightPageCss();
+      for (const tag of MEDIA_TAGS) {
+        expect(css).toContain(`${tag}:not(#darkmoon-specificity-boost)`);
+      }
+      expect(css).toContain(`filter: ${mediaFilterCSS(MEDIA_DIM_BRIGHTNESS_PERCENT)} !important;`);
+    });
+
+    it("counter-inverts iframes without dimming them", () => {
+      // The frame runs this same content script and already dimmed its own
+      // images; dimming the <iframe> element too would double it up.
+      expect(lightPageCss()).toContain(
+        `iframe:not(#darkmoon-specificity-boost) { filter: ${counterInvertFilterCSS()} !important; }`,
+      );
+    });
+  });
+
+  describe("on an already-dark page it leaves alone", () => {
+    it("dims media with brightness only — no invert, no hue-rotate", () => {
+      // There's no page-level filter to cancel here, so the counter-invert
+      // that a light page needs would actively break these images.
+      const css = darkPageCss();
+      expect(css).toContain(`filter: brightness(${MEDIA_DIM_BRIGHTNESS_PERCENT}%) !important;`);
+      expect(css).not.toContain("invert(");
+      expect(css).not.toContain("hue-rotate(");
+    });
+
+    it("dims every media tag", () => {
+      const css = darkPageCss();
+      for (const tag of MEDIA_TAGS) {
+        expect(css).toContain(`${tag}:not(#darkmoon-specificity-boost)`);
+      }
+    });
+
+    it("touches neither <html> nor <body>", () => {
+      expect(darkPageCss()).not.toContain("html {");
+      expect(darkPageCss()).not.toContain("body {");
+    });
+
+    it("leaves iframes alone — their own document dims its own images", () => {
+      expect(darkPageCss()).not.toContain("iframe");
+    });
+  });
+
+  it("honours a custom dim percentage on both branches", () => {
+    expect(buildInjectedCss({ filterCSS: PAGE_FILTER, isAlreadyDark: false, dimBrightnessPercent: 70 })).toContain(
+      "brightness(70%) invert(1) hue-rotate(180deg)",
+    );
+    expect(buildInjectedCss({ filterCSS: "", isAlreadyDark: true, dimBrightnessPercent: 70 })).toContain(
+      "filter: brightness(70%) !important;",
+    );
   });
 });

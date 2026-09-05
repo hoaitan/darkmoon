@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Full-page dark app-wrapper fixture</title>
+    <style>
+      /* body/html deliberately have NO explicit background of their own —
+         mirrors real SPA shells (e.g. abc.net.au) where all the actual
+         theming lives on an inner #app-wrapper div, not body/html. */
+      body {
+        margin: 0;
+        font-family: sans-serif;
+        color: #eee;
+      }
+      /* Covers ~all of the page — a real root app-shell wrapper (see
+         abc.net.au). DAR-17: this SHOULD be treated as an already-dark
+         island (its own opaque background is genuinely intentional and
+         must stay uninverted, size notwithstanding) — the bug was that
+         doing so used to also stop the scan from descending any further,
+         leaving every image inside un-dimmed. islands.ts now keeps
+         descending past a dark island; see its `classify` function. */
+      #app-wrapper {
+        background: #1a1a1a;
+        min-height: 100vh;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      img {
+        display: block;
+        width: 240px;
+        height: 120px;
+        margin: 12px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app-wrapper">
+      <h1>A full-page app shell with its own dark background</h1>
+      <p>
+        The wrapper covers the whole page, but the page itself should still be treated as needing the normal filter —
+        this isn't a small embedded widget.
+      </p>
+      <img
+        class="photo"
+        alt="a photo inside the full-page wrapper"
+        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAAB4CAIAAABD1OhwAAAACXBIWXMAAAPoAAAD6AG1e1JrAAACHklEQVR4nO3SQQ3DQAADsMIJiCEZusEpiLyLYzAulSwZgq8mr5Pf532+fZ3nzutcx3cKPes5vVPoYad3RuhZ53cKfY8SWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFziahha7QQgudTUILXaGFFjqbhBa6QgstdDYJLXSFFlrobBJa6AottNDZJLTQFVpoobNJaKErtNBCZ5PQQldooYXOJqGFrtBCC51NQgtdoYUWOpuEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCV2ihhc4moYWu0EILnU1CC12hhRY6m4QWukILLXQ2CS10hRZa6GwSWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFziahha7QQgudTUILXaGFFjqbhBa6QgstdDYJLXSFFlrobBJa6AottNDZJLTQFVpoobNJaKErtNBCZ5PQQldooYXOJqGFrtBCC51NQgtdoYUWOpuEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCC33a+Z1C36OEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCV2ihhc4moYWu0EILnU1CC12hhRY6m4QWukILLXQ2CS10hRZa6GwSWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFziahha7QQgudTUILXaGFFjqbhBa6QgstdDYJLXSFFlrobBJa6AottNDZJLTQFVpoobNJaKErtNBCZ5PQQldooYXOJqGFrtBCC51NQgtdoYUWOpuEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCC33a+Z1C36OEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCV2ihhc4moYWu0EILnU1CC12hhRY6m4QWukILLXQ2CS10hRZa6GwSWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFzqY/l9OlWqPiBPkAAAAASUVORK5CYII="
+      />
+    </div>
+  </body>
+</html>

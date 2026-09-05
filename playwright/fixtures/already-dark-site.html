@@ -14,6 +14,12 @@
         padding: 24px;
         max-width: 640px;
       }
+      img {
+        display: block;
+        width: 240px;
+        height: 120px;
+        margin: 12px 0;
+      }
       .card {
         background: #1e1e1e;
         border: 1px solid #2a2a2a;
@@ -25,7 +31,11 @@
   <body>
     <main>
       <h1>A site that ships its own dark theme</h1>
-      <div class="card">Darkmoon should detect this background is already dark and skip filtering entirely.</div>
+      <div class="card">Darkmoon should detect this background is already dark and skip page filtering.</div>
+      <!-- DAR-18: an already-dark site gets no page filter, so its photos used
+           to sit at full brightness against it. They now get a brightness dim
+           and nothing else — no invert to cancel means no hue-rotate either. -->
+      <img class="dark-photo" alt="a photo on an already-dark page" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAAB4CAIAAABD1OhwAAAACXBIWXMAAAPoAAAD6AG1e1JrAAACHklEQVR4nO3SQQ3DQAADsMIJiCEZusEpiLyLYzAulSwZgq8mr5Pf532+fZ3nzutcx3cKPes5vVPoYad3RuhZ53cKfY8SWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFziahha7QQgudTUILXaGFFjqbhBa6QgstdDYJLXSFFlrobBJa6AottNDZJLTQFVpoobNJaKErtNBCZ5PQQldooYXOJqGFrtBCC51NQgtdoYUWOpuEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCV2ihhc4moYWu0EILnU1CC12hhRY6m4QWukILLXQ2CS10hRZa6GwSWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFziahha7QQgudTUILXaGFFjqbhBa6QgstdDYJLXSFFlrobBJa6AottNDZJLTQFVpoobNJaKErtNBCZ5PQQldooYXOJqGFrtBCC51NQgtdoYUWOpuEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCC33a+Z1C36OEFrpCCy10NgktdIUWWuhsElroCi200NkktNAVWmihs0looSu00EJnk9BCV2ihhc4moYWu0EILnU1CC12hhRY6m4QWukILLXQ2CS10hRZa6GwSWugKLbTQ2SS00BVaaKGzSWihK7TQQmeT0EJXaKGFzqY/l9OlWqPiBPkAAAAASUVORK5CYII=" />
     </main>
   </body>
 </html>

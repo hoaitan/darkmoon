@@ -1,4 +1,3 @@
-import { counterInvertFilterCSS } from "../lib/theme-engine";
 import type { Mode } from "../lib/types";
 
 export interface NotificationCallbacks {
@@ -17,19 +16,16 @@ let dismissTimer: ReturnType<typeof setTimeout> | undefined;
 // selectors, not inheritance, so without this the card would silently
 // pick up the page's font/colors.
 //
-// .card's own `filter` counter-inverts Darkmoon's page-wide invert filter
-// on <html> (Shadow DOM isolates selectors, not composited paint effects,
-// so without this the card would render with its own colors flipped) — the
-// same trick used for img/video/canvas in content/index.ts. It's deliberately
-// on .card and not the shadow host: `filter` makes an element a new
-// containing block for `position: fixed` descendants, and putting it on the
-// host would hijack .card's own fixed positioning relative to the viewport.
+// No counter-invert filter on .card: the host is mounted on <html>
+// (so it works even before <body> exists — see showNotification), and
+// Darkmoon's page-wide invert filter lives on <body> specifically (see
+// buildInjectedCss's comment for why), so the card sits outside the
+// filtered subtree already and needs no cancellation.
 function buildStyles(): string {
   return `
   :host { all: initial; }
   .card {
     all: initial;
-    filter: ${counterInvertFilterCSS()};
     box-sizing: border-box;
     position: fixed;
     bottom: 12px;
@@ -113,7 +109,7 @@ function template(domain: string, currentOverride: Mode | undefined, globalMode:
       <div class="row controls">
         <select data-role="mode-select" aria-label="Mode for this site">
           ${option("default", `Default (${globalMode})`)}
-          ${option("light", "Light")}
+          ${option("original", "Original")}
           ${option("dark", "Dark")}
           ${option("auto", "Auto")}
         </select>

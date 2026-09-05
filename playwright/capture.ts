@@ -14,6 +14,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type BrowserContext, type Page } from "playwright";
+import { decodePng, getPixel, pixelLightness } from "./png-pixel";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = path.join(ROOT, "dist");
@@ -26,13 +27,51 @@ interface Fixture {
   file: string;
   /** Whether Darkmoon is expected to darken this page. */
   expectDarkened: boolean;
+  /** Fixture-specific assertions beyond the generic filter/notification checks. */
+  extraChecks?: (page: Page) => Promise<void>;
 }
 
 const FIXTURES: Fixture[] = [
-  { name: "light-site", file: "light-site.html", expectDarkened: true },
+  {
+    // DAR-17: a real pixel check, not just a computed-style one — see
+    // pixelLightnessAt's doc comment. (5, 650) is well below this fixture's
+    // short content and clear of the bottom-right notification: a "gap"
+    // relying on the page's own background rather than any specific
+    // element's, exactly the region the canvas-background-propagation bug
+    // left un-inverted despite <body>'s own filter reading back correct.
+    name: "light-site",
+    file: "light-site.html",
+    expectDarkened: true,
+    extraChecks: async (page) => {
+      const lightness = await pixelLightnessAt(page, 5, 650);
+      check(
+        "background in the empty gap below the content is actually dark, not just declared as such",
+        lightness < 60,
+      );
+    },
+  },
   { name: "spa-like", file: "spa-like.html", expectDarkened: true },
   { name: "docs-site", file: "docs-site.html", expectDarkened: true },
-  { name: "already-dark-site", file: "already-dark-site.html", expectDarkened: false },
+  {
+    // DAR-18: an already-dark site keeps its own colors — no page filter — but
+    // its photos now get a brightness dim so they don't glare against it.
+    // Brightness only: there is no page filter to cancel, so an invert here
+    // would turn every photo into a negative.
+    name: "already-dark-site",
+    file: "already-dark-site.html",
+    expectDarkened: false,
+    extraChecks: async (page) => {
+      const photoFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector(".dark-photo") as Element).filter,
+      );
+      check("photo on an already-dark page is dimmed", photoFilter.includes("brightness"));
+      check("photo on an already-dark page is not inverted", !photoFilter.includes("invert"));
+      check("photo on an already-dark page is not hue-rotated", !photoFilter.includes("hue-rotate"));
+
+      const bodyFilter = await page.evaluate(() => getComputedStyle(document.body).filter);
+      check("already-dark page itself is left completely alone", bodyFilter === "none");
+    },
+  },
   {
     name: "already-dark-external-css-site",
     file: "already-dark-external-css-site.html",
@@ -42,6 +81,145 @@ const FIXTURES: Fixture[] = [
     name: "already-dark-inert-stylesheet-site",
     file: "already-dark-inert-stylesheet-site.html",
     expectDarkened: false,
+  },
+  {
+    // DAR-18: an already-dark embedded widget on an otherwise light page is
+    // now inverted along with everything else and comes out light. Knowingly
+    // accepted: one flag governs the whole document, and exempting a widget
+    // requires the per-element classification that flag replaced. Kept as a
+    // fixture so the screenshot records what it looks like.
+    name: "already-dark-widget-site",
+    file: "already-dark-widget-site.html",
+    expectDarkened: true,
+    extraChecks: async (page) => {
+      const widgetFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector(".widget") as Element).filter,
+      );
+      check("embedded dark widget gets no filter of its own — the page filter governs it", widgetFilter === "none");
+    },
+  },
+  {
+    // DAR-18: every <img> on a darkened page gets exactly one counter-invert,
+    // however it is wrapped. A <picture> parent used to add a second one.
+    name: "images-site",
+    file: "images-site.html",
+    expectDarkened: true,
+    extraChecks: async (page) => {
+      const filters = await page.evaluate(() =>
+        [".standalone-photo", ".hero-photo", ".picture-photo"].map((sel) => ({
+          sel,
+          filter: getComputedStyle(document.querySelector(sel) as Element).filter,
+        })),
+      );
+      for (const { sel, filter } of filters) {
+        check(`${sel} gets its own dimmed counter-invert filter`, filter.includes("invert"));
+        check(`${sel} is inverted exactly once, not stacked`, (filter.match(/invert\(/g) ?? []).length === 1);
+      }
+
+      // The <picture> wrapper itself must contribute nothing — it paints no
+      // pixels of its own, and filtering it double-inverts the <img> inside.
+      const pictureFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector("picture") as Element).filter,
+      );
+      check("<picture> wrapper gets no filter of its own", pictureFilter === "none");
+
+      // Knowingly accepted with island removal: a CSS background-image is not
+      // a replaced element, so no blanket selector can reach it and it renders
+      // color-inverted. Asserted so the regression is deliberate, not silent.
+      const heroBackgroundFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector(".hero") as Element).filter,
+      );
+      check("background-image container is knowingly left to the page filter", heroBackgroundFilter === "none");
+    },
+  },
+  {
+    // DAR-18: a root app-shell wrapper with its own opaque dark background
+    // (common in real SPAs — see abc.net.au). html/body are still light, so
+    // the site-wide flag says "light" and the wrapper inverts with everything
+    // else. Nothing special happens to it or to the photo inside, which is the
+    // point: no per-element decision is made anywhere on the page.
+    name: "full-page-dark-wrapper-site",
+    file: "full-page-dark-wrapper-site.html",
+    expectDarkened: true,
+    extraChecks: async (page) => {
+      const wrapperFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector("#app-wrapper") as Element).filter,
+      );
+      check("app-shell wrapper gets no filter of its own", wrapperFilter === "none");
+
+      const photoFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector(".photo") as Element).filter,
+      );
+      check("photo inside the wrapper gets one counter-invert", (photoFilter.match(/invert\(/g) ?? []).length === 1);
+    },
+  },
+  {
+    // DAR-17: a classic <body><center><table>-based layout (news.ycombinator
+    // .com) where html/body never paint a background of their own. The
+    // margin beyond the (narrower-than-viewport) centered table used to
+    // stay the browser's plain unfiltered white canvas — a real rendering
+    // gap (the CSS canvas-background-propagation paint layer) that
+    // getComputedStyle alone can't see, since it read back correct the
+    // whole time; only an actual pixel check catches it. See
+    // buildInjectedCss's comment in src/content/index.ts for the fix.
+    name: "narrow-centered-table-site",
+    file: "narrow-centered-table-site.html",
+    expectDarkened: true,
+    extraChecks: async (page) => {
+      // The table is 500px wide, centered in a 1280px viewport — (20, 50)
+      // is well inside the left margin beyond it, at a height the table
+      // itself spans.
+      const lightness = await pixelLightnessAt(page, 20, 50);
+      check("the margin beyond the centered table is actually dark, not the unfiltered canvas", lightness < 60);
+    },
+  },
+  {
+    // DAR-17: real news sites are full of ad/tracker iframes. The content
+    // script only ran in the top frame before this fixture existed —
+    // manifest.json now sets all_frames: true so it runs inside every
+    // frame too, otherwise an iframe's own images render fully color-
+    // inverted with no correction at all (the top page's filter still
+    // visually composites over embedded frames regardless of whether
+    // anything is running inside them to counter it). This same-origin
+    // iframe stands in for that case — cross-origin ad iframes work the
+    // same way given <all_urls> host permissions, which this project can't
+    // easily fixture (would need a real second origin).
+    name: "iframe-embed-site",
+    file: "iframe-embed-site.html",
+    expectDarkened: true,
+    extraChecks: async (page) => {
+      await page.waitForTimeout(500); // iframe's own content script + css application
+      const frame = page.frames().find((f) => f.url().includes("iframe-embed-content.html"));
+      if (!frame) {
+        check("found the embedded iframe's own frame", false);
+        return;
+      }
+
+      // The iframe's own document is just a normal page from its own point
+      // of view — its .iframe-photo getting the standard dimmed-media
+      // filter (already covered by images-site's assertions) means its
+      // *internal* rendering is self-consistently correct on its own.
+      // What's specific to this fixture is the <iframe> tag itself, as seen
+      // from the PARENT page: it's a replaced element the parent's own
+      // filter composites over, so it needs the same counter-invert
+      // treatment as an unhandled <img> would — checked from the parent,
+      // not from inside the frame (the frame's own filter string will
+      // always mention "invert" as part of its own normal media rule,
+      // which doesn't say anything about the final composited result).
+      const iframeElementFilter = await page.evaluate(
+        () => getComputedStyle(document.querySelector("iframe") as Element).filter,
+      );
+      check("the <iframe> element itself is counter-inverted from the parent's side", iframeElementFilter !== "none");
+      check(
+        "the <iframe> counter-invert has no dim of its own (the frame dims its own content already)",
+        !iframeElementFilter.includes("brightness"),
+      );
+
+      const notificationInFrame = await frame.evaluate(
+        () => document.getElementById("darkmoon-notification-host") !== null,
+      );
+      check("no duplicate notification created inside the iframe", !notificationInFrame);
+    },
   },
 ];
 
@@ -113,11 +291,25 @@ async function startFixtureServer(): Promise<FixtureServer> {
 }
 
 async function pageFilter(page: Page): Promise<string> {
-  return page.evaluate(() => getComputedStyle(document.documentElement).filter);
+  // The page-wide filter lives on <body>, not <html> — see buildInjectedCss.
+  return page.evaluate(() => getComputedStyle(document.body).filter);
 }
 
 async function notificationHostCount(page: Page): Promise<number> {
   return page.locator("#darkmoon-notification-host").count();
+}
+
+/**
+ * Reads the ACTUAL rendered pixel at (x, y), not a computed-style value —
+ * see png-pixel.ts's doc comment for why this matters: DAR-17 found a real
+ * gap between the two (the CSS canvas-background-propagation paint layer),
+ * where computed style read back correct while the pixels themselves still
+ * showed the page's un-inverted original color.
+ */
+async function pixelLightnessAt(page: Page, x: number, y: number): Promise<number> {
+  const buf = await page.screenshot();
+  const img = decodePng(buf);
+  return pixelLightness(getPixel(img, x, y));
 }
 
 async function clickIgnoreInNotification(page: Page): Promise<void> {
@@ -248,6 +440,8 @@ async function main(): Promise<void> {
           check("page filter was skipped (already dark)", filter === "none");
           check("no notification shown for a no-op", !notified);
         }
+
+        await fixture.extraChecks?.(page);
 
         await page.screenshot({ path: path.join(OUT_DIR, `${fixture.name}-after.png`) });
         await page.close();

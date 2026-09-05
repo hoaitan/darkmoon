@@ -1,4 +1,9 @@
-export type Mode = "light" | "dark" | "auto";
+/**
+ * `"original"` means do nothing at all: no filter, no image dim, no
+ * notification — the site renders exactly as it shipped. It was called
+ * `"light"` in earlier versions; see migrateStoredSettings in storage.ts.
+ */
+export type Mode = "original" | "dark" | "auto";
 
 export interface FilterSettings {
   /** CSS filter brightness(), percent. 100 = unchanged. */
